@@ -36,10 +36,15 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 │   ┌────────────────────────┐  ┌────────────────────────┐  ┌─────────────────────────┐   │
 │   │   NFC Hardware Tools   │  │   Emergency Triage     │  │   Doctor Medical Portal │   │
 │   │   (TagTracer Engine)   │  │   (First Responder)    │  │   (AuthGuard Protected) │   │
-│   └────────────────────────┘  └────────────────────────┘  └─────────────────────────┘   │
-│                                                                                        │
-│   ┌────────────────────────────────────────────────────────────────────────────────┐   │
-│   │               Cryptographic Verification Engine (NfcCryptoService)             │   │
+│   └──────────┬─────────────┘  └───────────┬────────────┘  └───────────┬─────────────┘   │
+│              │                            │                           │                 │
+│   ┌──────────▼────────────────────────────▼───────────────────────────▼────────────┐   │
+│   │                   LifeTag Node.js / Express REST API (v1)                      │   │
+│   │                   (Controllers ➔ Services ➔ Repositories)                      │   │
+│   └───────────────────────────────────────┬────────────────────────────────────────┘   │
+│                                           │                                            │
+│   ┌───────────────────────────────────────▼────────────────────────────────────────┐   │
+│   │                   PostgreSQL Database (via Prisma ORM)                         │   │
 │   └────────────────────────────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -47,7 +52,8 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 - **Frontend Core**: React 18, Vite 5, TypeScript 5, React Router DOM v6
 - **UI & Styling**: Tailwind CSS, Radix UI Primitives, Lucide Icons, Sonner notifications
 - **Hardware Integration**: W3C Web NFC API (`NDEFReader`)
-- **State & Data Management**: TanStack React Query v5
+- **Backend API**: Node.js, Express, TypeScript, Zod Validation
+- **Database & Data Management**: PostgreSQL, Prisma ORM, TanStack React Query v5
 
 ---
 
@@ -66,19 +72,31 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
    cd lifetag
    ```
 
-2. Install dependencies:
+2. Setup the Backend:
    ```bash
+   cd server
    npm install
+   # Configure your PostgreSQL database URL in the .env file:
+   # DATABASE_URL="postgresql://username:password@host:port/database_name"
+   npm run prisma:generate
+   npm run prisma:migrate
+   npm run dev
    ```
 
-3. Launch local development server:
+3. Setup the Frontend (in a new terminal):
    ```bash
+   cd client
+   npm install
    npm run dev
    ```
 
 4. Build for production:
    ```bash
-   npm run build
+   # Build frontend
+   cd client && npm run build
+   
+   # Build backend
+   cd ../server && npm run build
    ```
 
 ---

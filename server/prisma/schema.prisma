@@ -1,0 +1,105 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  DOCTOR
+  FIRST_RESPONDER
+}
+
+enum OrgType {
+  GOVERNMENT
+  PRIVATE
+  GOVERNMENT_FUNDED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  userId    String   @unique // e.g., "US12345"
+  accountId String   @unique // e.g., "12345"
+  name      String
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Patient Profile Relations
+  triageProfile  TriageProfile?
+  medicalHistory MedicalHistory?
+
+  @@index([accountId])
+  @@index([userId])
+}
+
+model DoctorProfile {
+  id                   String   @id @default(uuid())
+  userId               String   @unique // e.g., "DR98765"
+  name                 String
+  password             String
+  contactInfo          String
+  medicalLicenseNumber String   @unique
+  qualifications       String[]
+  hospitalClinic       String
+  specialty            String
+  createdAt            DateTime @default(now())
+
+  @@index([userId])
+}
+
+model FirstResponderProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique // e.g., "FR54321"
+  name             String
+  password         String
+  occupation       String
+  contactInfo      String
+  agency           String
+  agencyId         String
+  organizationType OrgType  @default(GOVERNMENT)
+  qualification    String
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+}
+
+model TriageProfile {
+  id                String   @id @default(uuid())
+  user              User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId            String   @unique
+  age               Int
+  bloodGroup        String
+  allergies         String[]
+  emergencyContacts Json     // Array of { userId, name, phone }
+  dnrStatus         Boolean  @default(false)
+  organDonor        Boolean  @default(false)
+  insuranceId       String?
+  primaryPhysician  String?  // Doctor userId reference
+  updatedAt         DateTime @updatedAt
+}
+
+model MedicalHistory {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId         String   @unique
+  drinkingHabits String?
+  smokingHabits  String?
+  medications    String[]
+  illnesses      String[]
+  surgeries      String[]
+  lastCheckup    Json?    // { weight, bmi, sugar, bp }
+  updatedAt      DateTime @updatedAt
+}
+
+model ScanAuditLog {
+  id             String   @id @default(uuid())
+  scannedBy      String   // First Responder or Doctor userId
+  patientAccount String   // Account ID scanned
+  timestamp      DateTime @default(now())
+  deviceMeta     String?
+}
