@@ -16,7 +16,8 @@ interface MainLayoutProps {
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { currentUser: user, logout } = useAuth();
+  const isAuthenticated = !!user;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -38,7 +39,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5">
                       <p className="text-sm font-medium">{user?.name}</p>
-                      <p className="text-xs text-gray-500">{user?.user_id}</p>
+                      <p className="text-xs text-gray-500">{user?.userId}</p>
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
@@ -47,7 +48,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         <span>Edit Profile</span>
                       </Link>
                     </DropdownMenuItem>
-                    {user?.role === 'user' && (
+                    {user?.role === 'USER' && (
                       <>
                         <DropdownMenuItem asChild>
                           <Link to="/my-contacts" className="cursor-pointer w-full">

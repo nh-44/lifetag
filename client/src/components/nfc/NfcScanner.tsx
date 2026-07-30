@@ -31,7 +31,7 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
       try {
         abortController = new AbortController();
         // @ts-ignore - NDEFReader is not in TypeScript's lib.dom yet
-        const ndef = new NDEFReader();
+        const ndef = new NDEFReader() as any;
         
         await ndef.scan({ signal: abortController.signal });
         console.log("NFC scan started successfully");

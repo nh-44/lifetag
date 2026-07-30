@@ -1,7 +1,6 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { toast } from 'sonner';
-import { authenticateUser, checkUserIdAvailability, saveUserProfile, saveDoctorProfile, saveFirstResponderProfile } from '@/services/userService';
+import { authenticateUser, registerUser, checkUserIdAvailability } from '@/services/userService';
 
 export type UserRole = 'USER' | 'DOCTOR' | 'FIRST_RESPONDER';
 
@@ -17,8 +16,8 @@ interface AuthContextProps {
   currentUser: User | null;
   loading: boolean;
   error: string | null;
-  login: (userId: string, password: string, redirectAccountId?: string) => Promise<void>;
-  signup: (userData: Partial<User> & { password: string, confirmPassword: string }) => Promise<void>;
+  login: (userId: string, password: string, redirectAccountId?: string) => Promise<boolean>;
+  signup: (userData: Partial<User> & { password: string, confirmPassword: string }) => Promise<boolean>;
   logout: () => void;
   checkUserIdAvailability: (userId: string) => Promise<boolean>;
 }
@@ -27,8 +26,8 @@ const AuthContext = createContext<AuthContextProps>({
   currentUser: null,
   loading: false,
   error: null,
-  login: async () => {},
-  signup: async () => {},
+  login: async () => false,
+  signup: async () => false,
   logout: () => {},
   checkUserIdAvailability: async () => false,
 });
@@ -63,60 +62,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('User ID and password are required');
       }
       
-      // Try to authenticate with MongoDB
-      const authResult = await authenticateUser(userId, password);
+      const response = await authenticateUser(userId, password);
       
-      if (!authResult.success) {
-        // If MongoDB auth fails, fall back to the mock authentication logic
-        const prefixToRole: Record<string, UserRole> = {
-          'US': 'USER',
-          'DR': 'DOCTOR',
-          'FR': 'FIRST_RESPONDER'
-        };
-        
-        const prefix = userId.substring(0, 2);
-        const role = prefixToRole[prefix];
-        
-        if (!role) {
-          throw new Error('Invalid User ID format');
-        }
-        
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Mock successful login (this would be replaced with actual API response)
-        const mockUser: User = {
-          userId,
-          name: `${role.charAt(0)}${role.slice(1).toLowerCase()} User`,
-          role,
-          token: 'mock-jwt-token',
-          ...(role === 'USER' ? { accountId: userId.substring(2) } : {})
-        };
-        
-        setCurrentUser(mockUser);
-        localStorage.setItem('lifetagUser', JSON.stringify(mockUser));
-      } else {
-        // MongoDB authentication successful
-        const user = authResult.user;
-        
-        // Create a user object with the required format
-        const authenticatedUser: User = {
-          userId: user.userId,
-          name: user.name,
-          role: user.role,
-          token: 'mongodb-jwt-token', // In a real app, this would be a JWT from your auth system
-          ...(user.role === 'USER' ? { accountId: user.accountId } : {})
-        };
-        
-        setCurrentUser(authenticatedUser);
-        localStorage.setItem('lifetagUser', JSON.stringify(authenticatedUser));
+      if (response && response.user && response.token) {
+        const userWithToken = { ...response.user, token: response.token };
+        setCurrentUser(userWithToken);
+        localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
+        localStorage.setItem('lifetag_token', response.token);
+        toast.success('Logged in successfully');
+        return true;
       }
-      
-      toast.success('Logged in successfully');
+      return false;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to login';
       setError(message);
       toast.error(message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -135,95 +96,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Passwords do not match');
       }
       
-      // Validate user ID format
-      const { userId } = userData;
-      const prefixToRole: Record<string, UserRole> = {
-        'US': 'USER',
-        'DR': 'DOCTOR',
-        'FR': 'FIRST_RESPONDER'
-      };
+      const response = await registerUser(userData);
       
-      const prefix = userId.substring(0, 2);
-      const role = prefixToRole[prefix];
-      
-      if (!role) {
-        throw new Error('Invalid User ID format');
+      if (response && response.user && response.token) {
+        const userWithToken = { ...response.user, token: response.token };
+        setCurrentUser(userWithToken);
+        localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
+        localStorage.setItem('lifetag_token', response.token);
+        toast.success('Account created successfully');
+        return true;
       }
       
-      // Check if user ID is available
-      const isAvailable = await checkUserIdAvailability(userId);
-      if (!isAvailable) {
-        throw new Error('User ID is already taken');
-      }
-      
-      // Create the user based on role
-      if (role === 'USER') {
-        const accountId = userId.substring(2);
-        await saveUserProfile({
-          userId,
-          accountId,
-          name: userData.name || `New User`,
-          age: 0,
-          bloodGroup: '',
-          allergies: [],
-          emergencyContacts: [],
-          dnrStatus: false,
-          primaryPhysician: { userId: '', name: '' },
-          insuranceId: '',
-          doctorOnlyInfo: {
-            drinkingHabits: '',
-            smokingHabits: '',
-            medications: [],
-            illnesses: [],
-            surgeries: [],
-            lastCheckup: {
-              weight: 0,
-              bmi: 0,
-              sugar: 0,
-              bp: ''
-            }
-          }
-        });
-      } else if (role === 'DOCTOR') {
-        await saveDoctorProfile({
-          userId,
-          name: userData.name || `New Doctor`,
-          contactInfo: '',
-          medicalLicenseNumber: '',
-          qualifications: [],
-          hospitalClinic: '',
-          specialty: ''
-        });
-      } else if (role === 'FIRST_RESPONDER') {
-        await saveFirstResponderProfile({
-          userId,
-          name: userData.name || `New First Responder`,
-          occupation: '',
-          contactInfo: '',
-          agency: '',
-          agencyId: '',
-          organizationType: 'Government',
-          qualification: ''
-        });
-      }
-      
-      // Create user object for authentication
-      const newUser: User = {
-        userId,
-        name: userData.name || `New ${role.charAt(0)}${role.slice(1).toLowerCase()}`,
-        role,
-        token: 'mongodb-jwt-token', // In a real app, this would be a JWT
-        ...(role === 'USER' ? { accountId: userId.substring(2) } : {})
-      };
-      
-      setCurrentUser(newUser);
-      localStorage.setItem('lifetagUser', JSON.stringify(newUser));
-      
-      toast.success('Account created successfully');
+      return false;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create account';
       setError(message);
       toast.error(message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -232,6 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('lifetagUser');
+    localStorage.removeItem('lifetag_token');
     toast.success('Logged out successfully');
   };
 

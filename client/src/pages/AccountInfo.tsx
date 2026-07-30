@@ -4,16 +4,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import AuthGuard from '@/components/auth/AuthGuard';
 import { useAuth } from '@/contexts/AuthContext';
-import { currentUserService as userService } from '@/services/api';
-import { UserAccount, isUserAccount, isDoctorAccount, isFirstResponderAccount } from '@/types/user';
+import * as userService from '@/services/userService';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
 import { AlertTriangle, ChevronRight, Heading1 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const AccountInfo = () => {
   const { accountId } = useParams<{ accountId: string }>();
-  const { user } = useAuth();
-  const [accountData, setAccountData] = useState<UserAccount | null>(null);
+  const { currentUser: user } = useAuth();
+  const [accountData, setAccountData] = useState<userService.UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDoctorInfo, setShowDoctorInfo] = useState(false);
@@ -29,20 +28,20 @@ const AccountInfo = () => {
 
       try {
         // If the logged-in user is the account owner, redirect to edit profile
-        if (user && isUserAccount(user) && user.account_id === accountId) {
+        if (user && user.role === 'USER' && user.accountId === accountId) {
           navigate('/edit-profile');
           return;
         }
 
         // Determine what data to fetch based on user role
-        if (user && isDoctorAccount(user)) {
+        if (user && user.role === 'DOCTOR') {
           // Doctors can see both emergency and doctor-only info
           const data = await userService.getDoctorInfo(accountId);
           setAccountData(data);
           setShowDoctorInfo(true);
-        } else if (user && isFirstResponderAccount(user)) {
+        } else if (user && user.role === 'FIRST_RESPONDER') {
           // First responders can only see emergency info
-          const data = await userService.getEmergencyInfo(accountId) as UserAccount;
+          const data = await userService.getEmergencyInfo(accountId) as userService.UserProfile;
           setAccountData(data);
           setShowDoctorInfo(false);
         } else {
@@ -119,7 +118,7 @@ const AccountInfo = () => {
 
   return (
     <MainLayout>
-      <AuthGuard requireAuth={true}>
+      <AuthGuard>
         <div className="medical-container py-16 animate-fade-in">
           <div className="max-w-3xl mx-auto">
             <div className="bg-medical text-white rounded-t-lg p-6">
@@ -127,7 +126,7 @@ const AccountInfo = () => {
                 <div className="bg-white text-medical font-bold px-2 py-0.5 text-xs rounded-md">
                   ACCOUNT ID: {accountId}
                 </div>
-                {accountData.dnr_status && (
+                {accountData.dnrStatus && (
                   <div className="bg-emergency text-white font-bold px-2 py-0.5 text-xs rounded-md">
                     DNR
                   </div>
@@ -141,11 +140,11 @@ const AccountInfo = () => {
                 </div>
                 <div>
                   <span className="text-white/70 text-sm">Blood Type:</span>{' '}
-                  <span className="font-medium">{accountData.blood_group}</span>
+                  <span className="font-medium">{accountData.bloodGroup}</span>
                 </div>
                 <div>
                   <span className="text-white/70 text-sm">Insurance ID:</span>{' '}
-                  <span className="font-medium">{accountData.insurance_id || 'N/A'}</span>
+                  <span className="font-medium">{accountData.insuranceId || 'N/A'}</span>
                 </div>
               </div>
             </div>
@@ -170,12 +169,12 @@ const AccountInfo = () => {
               {/* Emergency Contacts Section */}
               <section>
                 <h2 className="text-xl font-semibold text-gray-800 mb-3">Emergency Contacts</h2>
-                {accountData.emergency_contacts && accountData.emergency_contacts.length > 0 ? (
+                {accountData.emergencyContacts && accountData.emergencyContacts.length > 0 ? (
                   <div className="space-y-2">
-                    {accountData.emergency_contacts.map((contact, index) => (
+                    {accountData.emergencyContacts.map((contact, index) => (
                       <div key={index} className="flex items-center bg-gray-50 p-3 rounded-md">
                         <div className="flex-1">
-                          <p className="font-medium">{contact}</p>
+                          <p className="font-medium">{typeof contact === 'string' ? contact : contact.name}</p>
                         </div>
                       </div>
                     ))}
@@ -186,17 +185,17 @@ const AccountInfo = () => {
               </section>
 
               {/* Primary Physician Section */}
-              {accountData.primary_physician && (
+              {accountData.primaryPhysician && (
                 <section>
                   <h2 className="text-xl font-semibold text-gray-800 mb-3">Primary Physician</h2>
                   <div className="bg-gray-50 p-3 rounded-md">
-                    <p className="font-medium">{accountData.primary_physician}</p>
+                    <p className="font-medium">{typeof accountData.primaryPhysician === 'string' ? accountData.primaryPhysician : accountData.primaryPhysician.name}</p>
                   </div>
                 </section>
               )}
 
               {/* Doctor-Only Information - Only shown to doctors */}
-              {showDoctorInfo && accountData.doctor_only_info && (
+              {showDoctorInfo && accountData.doctorOnlyInfo && (
                 <>
                   <div className="border-t border-gray-200 pt-6">
                     <div className="bg-blue-50 border-l-4 border-medical p-4 mb-6">
@@ -218,11 +217,11 @@ const AccountInfo = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">Drinking</p>
-                          <p className="font-medium">{accountData.doctor_only_info.drinking_habits || 'Not specified'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.drinkingHabits || 'Not specified'}</p>
                         </div>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">Smoking</p>
-                          <p className="font-medium">{accountData.doctor_only_info.smoking_habits || 'Not specified'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.smokingHabits || 'Not specified'}</p>
                         </div>
                       </div>
                     </section>
@@ -230,9 +229,9 @@ const AccountInfo = () => {
                     {/* Current Medications Section */}
                     <section className="mt-6">
                       <h2 className="text-xl font-semibold text-gray-800 mb-3">Current Medications</h2>
-                      {accountData.doctor_only_info.medications && accountData.doctor_only_info.medications.length > 0 ? (
+                      {accountData.doctorOnlyInfo.medications && accountData.doctorOnlyInfo.medications.length > 0 ? (
                         <div className="space-y-2">
-                          {accountData.doctor_only_info.medications.map((medication, index) => (
+                          {accountData.doctorOnlyInfo.medications.map((medication, index) => (
                             <div key={index} className="bg-gray-50 p-3 rounded-md">
                               <p>{medication}</p>
                             </div>
@@ -246,9 +245,9 @@ const AccountInfo = () => {
                     {/* Current Illnesses Section */}
                     <section className="mt-6">
                       <h2 className="text-xl font-semibold text-gray-800 mb-3">Current Illnesses or Disorders</h2>
-                      {accountData.doctor_only_info.illnesses && accountData.doctor_only_info.illnesses.length > 0 ? (
+                      {accountData.doctorOnlyInfo.illnesses && accountData.doctorOnlyInfo.illnesses.length > 0 ? (
                         <div className="space-y-2">
-                          {accountData.doctor_only_info.illnesses.map((illness, index) => (
+                          {accountData.doctorOnlyInfo.illnesses.map((illness, index) => (
                             <div key={index} className="bg-gray-50 p-3 rounded-md">
                               <p>{illness}</p>
                             </div>
@@ -262,9 +261,9 @@ const AccountInfo = () => {
                     {/* Previous Surgeries Section */}
                     <section className="mt-6">
                       <h2 className="text-xl font-semibold text-gray-800 mb-3">Previous Surgeries</h2>
-                      {accountData.doctor_only_info.surgeries && accountData.doctor_only_info.surgeries.length > 0 ? (
+                      {accountData.doctorOnlyInfo.surgeries && accountData.doctorOnlyInfo.surgeries.length > 0 ? (
                         <div className="space-y-2">
-                          {accountData.doctor_only_info.surgeries.map((surgery, index) => (
+                          {accountData.doctorOnlyInfo.surgeries.map((surgery, index) => (
                             <div key={index} className="bg-gray-50 p-3 rounded-md">
                               <p>{surgery}</p>
                             </div>
@@ -281,19 +280,19 @@ const AccountInfo = () => {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">Weight (kg)</p>
-                          <p className="font-medium">{accountData.doctor_only_info.last_checkup.weight || 'N/A'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.lastCheckup?.weight || 'N/A'}</p>
                         </div>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">BMI</p>
-                          <p className="font-medium">{accountData.doctor_only_info.last_checkup.bmi || 'N/A'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.lastCheckup?.bmi || 'N/A'}</p>
                         </div>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">Blood Sugar</p>
-                          <p className="font-medium">{accountData.doctor_only_info.last_checkup.sugar || 'N/A'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.lastCheckup?.sugar || 'N/A'}</p>
                         </div>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm text-gray-500">Blood Pressure</p>
-                          <p className="font-medium">{accountData.doctor_only_info.last_checkup.bp || 'N/A'}</p>
+                          <p className="font-medium">{accountData.doctorOnlyInfo.lastCheckup?.bp || 'N/A'}</p>
                         </div>
                       </div>
                     </section>
