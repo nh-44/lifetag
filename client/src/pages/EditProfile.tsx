@@ -185,7 +185,8 @@ const EditProfile = () => {
       // Update user profile with emergency info
       const updatedProfile: UserProfile = {
         ...userProfile,
-        // Keep doctor-only info as is
+        allergies: userProfile.allergies.map(a => a.trim()).filter(a => a !== ''),
+        // Keep doctor-only info as is implicitly
       };
       
       // In a real app, this would validate and save to the backend
@@ -389,10 +390,10 @@ const EditProfile = () => {
                     <Input 
                       id="allergies" 
                       placeholder="Separate with commas" 
-                      value={userProfile.allergies.join(', ')} 
+                      value={userProfile.allergies.join(',')} 
                       onChange={(e) => setUserProfile({
                         ...userProfile, 
-                        allergies: e.target.value.split(',').map(a => a.trim()).filter(a => a !== '')
+                        allergies: e.target.value.split(',')
                       })}
                     />
                   </div>

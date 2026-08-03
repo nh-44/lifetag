@@ -14,6 +14,7 @@ import {
   Radio
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
@@ -36,6 +37,12 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+
+const roleLabel: Record<string, string> = {
+  USER: 'Patient',
+  DOCTOR: 'Doctor',
+  FIRST_RESPONDER: 'First Responder',
+};
 
 const Header = () => {
   const { currentUser, logout } = useAuth();
@@ -81,6 +88,9 @@ const Header = () => {
                 <Button variant="ghost" className="flex items-center space-x-2">
                   <User size={18} />
                   <span>{currentUser.name}</span>
+                  <Badge variant="outline" className="ml-1 text-xs border-blue-200 bg-blue-50 text-blue-700">
+                    {roleLabel[currentUser.role] ?? currentUser.role}
+                  </Badge>
                   <ChevronDown size={16} />
                 </Button>
               </DropdownMenuTrigger>
@@ -175,6 +185,15 @@ const Header = () => {
             
             {currentUser ? (
               <>
+                <div className="flex items-center justify-between p-2 mb-2 bg-blue-50 rounded border border-blue-100">
+                  <div className="flex items-center space-x-2">
+                    <User size={18} className="text-blue-700" />
+                    <span className="font-medium text-blue-900">{currentUser.name}</span>
+                  </div>
+                  <Badge variant="outline" className="bg-white text-xs text-blue-700 border-blue-200">
+                    {roleLabel[currentUser.role] ?? currentUser.role}
+                  </Badge>
+                </div>
                 <Link 
                   to="/edit-profile" 
                   className="flex items-center space-x-2 p-2 rounded hover:bg-blue-50"
