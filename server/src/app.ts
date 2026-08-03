@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { prisma } from './config/database';
 import v1Router from './routes/v1';
 import { errorHandler } from './middlewares/error.middleware';
+import { apiLimiter } from './middlewares/rateLimit.middleware';
 
 const app: Express = express();
 
@@ -52,7 +53,7 @@ app.get('/api/v1/health', async (req: Request, res: Response) => {
 });
 
 // Mount API Routes
-app.use('/api/v1', v1Router);
+app.use('/api/v1', apiLimiter, v1Router);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

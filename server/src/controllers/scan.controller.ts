@@ -20,5 +20,35 @@ export const scanController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  exportScanHistory: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await scanService.getScanHistory(req.user!.userId);
+      
+      if (!result || result.length === 0) {
+        return res.status(404).json({ success: false, message: 'No scan history found' });
+      }
+      
+      const headers = ['id', 'patientAccount', 'timestamp', 'deviceMeta'];
+      const csvRows = [headers.join(',')];
+      
+      for (const row of result) {
+        const values = headers.map(header => {
+          const val = (row as any)[header];
+          const escaped = ('' + (val || '')).replace(/"/g, '""');
+          return `"${escaped}"`;
+        });
+        csvRows.push(values.join(','));
+      }
+      
+      const csvData = csvRows.join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="scan-history.csv"');
+      res.status(200).send(csvData);
+    } catch (error) {
+      next(error);
+    }
   }
 };

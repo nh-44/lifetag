@@ -14,4 +14,15 @@ export const scanAuditRepository = {
       take: 100,
     });
   },
+  checkRecentScan: async (scannedBy: string, patientAccount: string, hours: number = 24) => {
+    const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const log = await prisma.scanAuditLog.findFirst({
+      where: {
+        scannedBy,
+        patientAccount,
+        timestamp: { gte: cutoff }
+      }
+    });
+    return !!log;
+  }
 };

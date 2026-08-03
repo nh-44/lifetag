@@ -11,5 +11,6 @@ router.use(requireRole(Role.FIRST_RESPONDER, Role.DOCTOR));
 
 router.post('/', scanController.logScan);
 router.get('/history', scanController.getScanHistory);
+router.get('/export', scanController.exportScanHistory);
 
 export default router;

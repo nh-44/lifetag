@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { patientController } from '../../controllers/patient.controller';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { requireRole } from '../../middlewares/rbac.middleware';
+import { requireMedicalConsent } from '../../middlewares/consent.middleware';
 import { Role } from '../../constants/roles';
 
 const router = Router();
@@ -13,7 +14,7 @@ router.use(authMiddleware);
 router.get('/triage/:accountId', requireRole(Role.FIRST_RESPONDER, Role.DOCTOR), patientController.getEmergencyInfo);
 
 // Full Medical Info - available only to Doctors
-router.get('/medical/:accountId', requireRole(Role.DOCTOR), patientController.getFullMedicalInfo);
+router.get('/medical/:accountId', requireRole(Role.DOCTOR), requireMedicalConsent, patientController.getFullMedicalInfo);
 
 // Patient self-management - available only to Users
 router.get('/me', requireRole(Role.USER), patientController.getMyProfile);
