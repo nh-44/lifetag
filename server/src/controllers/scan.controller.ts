@@ -5,8 +5,16 @@ import { sendSuccess } from '../utils/response.utils';
 export const scanController = {
   logScan: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { patientAccount, deviceMeta } = req.body;
-      const result = await scanService.logScan(req.user!.userId, patientAccount, deviceMeta);
+      const { patientAccount, deviceMeta, tagPayload } = req.body;
+      let finalDeviceMeta = deviceMeta || '';
+      
+      if (tagPayload && tagPayload.authoritySignature) {
+        finalDeviceMeta += ' [Authority-Certified]';
+      } else if (tagPayload) {
+        finalDeviceMeta += ' [Self-Signed]';
+      }
+      
+      const result = await scanService.logScan(req.user!.userId, patientAccount, finalDeviceMeta.trim());
       sendSuccess(res, result, 201);
     } catch (error) {
       next(error);

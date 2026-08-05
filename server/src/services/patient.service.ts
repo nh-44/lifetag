@@ -1,6 +1,7 @@
 import { userRepository } from '../repositories/userRepository';
 import { EmergencyInfoDTO, FullUserProfileDTO } from '../types/patient.types';
 import { User, TriageProfile, MedicalHistory } from '@prisma/client';
+import { CryptoUtils } from '../utils/crypto.utils';
 
 type UserWithRelations = User & {
   triageProfile: TriageProfile | null;
@@ -26,6 +27,7 @@ const mapToEmergencyInfo = (user: UserWithRelations): EmergencyInfoDTO => {
     dnrStatus: user.triageProfile?.dnrStatus || false,
     primaryPhysician: user.triageProfile?.primaryPhysician ? { userId: user.triageProfile.primaryPhysician, name: 'Dr.' } : { userId: '', name: '' },
     insuranceId: user.triageProfile?.insuranceId || '',
+    authoritySignature: user.triageProfile?.authoritySignature || undefined,
   };
 };
 
@@ -71,6 +73,7 @@ export const patientService = {
       dnrStatus: data.dnrStatus,
       insuranceId: data.insuranceId,
       primaryPhysician: data.primaryPhysician?.userId || null,
+      authoritySignature: data.authoritySignature || CryptoUtils.simulateAuthoritySignature(userId),
     };
 
     const medicalData = {

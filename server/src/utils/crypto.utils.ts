@@ -76,4 +76,12 @@ export class CryptoUtils {
       .digest('hex');
     return hashedKey;
   }
+
+  /**
+   * Simulates generation of an Authority Signature for the patient's public key or profile.
+   */
+  static simulateAuthoritySignature(patientIdentifier: string): string {
+    const raw = crypto.createHash('sha256').update(patientIdentifier + 'AUTHORITY_SECRET').digest('hex');
+    return `AUTH-SIG-${raw.substring(0, 24).toUpperCase()}`;
+  }
 }

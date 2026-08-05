@@ -80,6 +80,7 @@ model TriageProfile {
   organDonor        Boolean  @default(false)
   insuranceId       String?
   primaryPhysician  String?  // Doctor userId reference
+  authoritySignature String? // Authority signature
   updatedAt         DateTime @updatedAt
 }
 
