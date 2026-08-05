@@ -9,7 +9,7 @@ const envSchema = z.object({
   PORT: z.string().default('5000'),
   NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL environment variable is required'),
-  JWT_SECRET: z.string().default('lifetag_super_secret_jwt_key_change_in_production_2026'),
+  JWT_SECRET: z.string().min(1, 'JWT_SECRET environment variable is required'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
 });
 
