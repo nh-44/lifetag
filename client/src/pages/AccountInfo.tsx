@@ -8,6 +8,7 @@ import * as userService from '@/services/userService';
 import { useToast } from '@/hooks/use-toast';
 import { AlertTriangle, ChevronRight, Heading1 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import TrustBadge from '@/components/nfc/TrustBadge';
 
 const AccountInfo = () => {
   const { accountId } = useParams<{ accountId: string }>();
@@ -150,6 +151,14 @@ const AccountInfo = () => {
             </div>
 
             <div className="medical-card rounded-t-none space-y-6">
+              {/* Trust Badge */}
+              <TrustBadge
+                status={
+                  accountData.authoritySignature
+                    ? 'authority-certified'
+                    : 'server-verified'
+                }
+              />
               {/* Allergies Section */}
               <section>
                 <h2 className="text-xl font-semibold text-gray-800 mb-3">Allergies</h2>

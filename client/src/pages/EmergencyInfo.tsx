@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   Card, 
   CardContent, 
@@ -13,15 +13,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserEmergencyInfo, EmergencyInfo as EmergencyInfoType } from '@/services/userService';
 import { Badge } from '@/components/ui/badge';
+import { NfcCryptoService } from '@/services/nfcCryptoService';
+import TrustBadge, { TrustStatus } from '@/components/nfc/TrustBadge';
+import { NfcTagPayload } from '@/types';
 
 const EmergencyInfo = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<EmergencyInfoType | null>(null);
+  const [trustStatus, setTrustStatus] = useState<TrustStatus>('loading');
+  const [trustError, setTrustError] = useState<string | undefined>(undefined);
   
   useEffect(() => {
     // Redirect if not logged in or not a first responder
@@ -62,17 +68,48 @@ const EmergencyInfo = () => {
         }
         
         setInfo(data);
+
+        // --- Two-Tier Certificate Verification ---
+        // Check if a raw NFC tag payload was passed via navigation state (from NFC scan)
+        const rawTagPayload = (location.state as { tagPayload?: NfcTagPayload })?.tagPayload;
+
+        if (rawTagPayload && rawTagPayload.signature && rawTagPayload.tagId) {
+          // Client-side verification using the raw tag payload
+          try {
+            const result = await NfcCryptoService.verifyTagIntegrity(rawTagPayload);
+            if (!result.verified) {
+              setTrustStatus('failed');
+              setTrustError(result.error);
+            } else if (result.trustedAuthority) {
+              setTrustStatus('authority-certified');
+            } else {
+              setTrustStatus('self-signed');
+            }
+          } catch {
+            setTrustStatus('failed');
+            setTrustError('Cryptographic verification encountered an error.');
+          }
+        } else {
+          // No raw payload — data came from server API.
+          // Show authority registration status from server data.
+          if (data.authoritySignature) {
+            setTrustStatus('authority-certified');
+          } else {
+            setTrustStatus('server-verified');
+          }
+        }
       } catch (err) {
         console.error('Error fetching information:', err);
         const message = err instanceof Error ? err.message : 'Failed to load medical information';
         setError(message);
+        setTrustStatus('failed');
       } finally {
         setLoading(false);
       }
     };
     
     fetchEmergencyInfo();
-  }, [currentUser, accountId, navigate]);
+  }, [currentUser, accountId, navigate, location.state]);
   
   if (loading) {
     return (
@@ -102,6 +139,7 @@ const EmergencyInfo = () => {
         
         {info && (
           <div className="space-y-6">
+            <TrustBadge status={trustStatus} errorMessage={trustError} />
             <Card>
               <CardHeader className="bg-lifetag-light">
                 <CardTitle className="flex items-center">

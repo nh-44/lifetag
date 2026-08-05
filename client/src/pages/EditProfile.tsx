@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserProfile, DoctorProfile, FirstResponderProfile, getUserProfileByRole, saveUserProfile, saveDoctorProfile, saveFirstResponderProfile } from '@/services/userService';
 import { toast } from 'sonner';
+import { NfcCryptoService } from '@/services/nfcCryptoService';
 
 const EditProfile = () => {
   const { currentUser, loading: authLoading } = useAuth();
@@ -45,6 +46,12 @@ const EditProfile = () => {
   const [illnesses, setIllnesses] = useState<string[]>(['']);
   const [surgeries, setSurgeries] = useState<string[]>(['']);
   const [qualifications, setQualifications] = useState<string[]>(['']);
+
+  // Key status state for Security tab
+  const [keyExists, setKeyExists] = useState<boolean | null>(null);
+  const [publicKeyFingerprint, setPublicKeyFingerprint] = useState<string>('');
+  const [authorityRegistered, setAuthorityRegistered] = useState(false);
+  const [keyLoading, setKeyLoading] = useState(false);
   
   // Load profile based on user role
   useEffect(() => {
@@ -143,6 +150,40 @@ const EditProfile = () => {
     
     fetchProfileData();
   }, [currentUser, navigate]);
+
+  // Check local key pair status for Security tab (USER role only)
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'USER') return;
+
+    const checkKeyStatus = async () => {
+      setKeyLoading(true);
+      try {
+        const stored = localStorage.getItem('lifetag_ecdsa_keypair');
+        if (stored) {
+          setKeyExists(true);
+          const parsed = JSON.parse(stored);
+          // Use the x-coordinate of the public key as a fingerprint
+          const xCoord: string = parsed.publicKey?.x || '';
+          setPublicKeyFingerprint(xCoord.substring(0, 16));
+        } else {
+          setKeyExists(false);
+          setPublicKeyFingerprint('');
+        }
+      } catch {
+        setKeyExists(false);
+      }
+
+      // Check authority registration from profile data
+      if (userProfile?.authoritySignature) {
+        setAuthorityRegistered(true);
+      } else {
+        setAuthorityRegistered(false);
+      }
+      setKeyLoading(false);
+    };
+
+    checkKeyStatus();
+  }, [currentUser, userProfile]);
   
   // Handle adding/removing dynamic field items
   const handleAddField = (
@@ -317,9 +358,10 @@ const EditProfile = () => {
       {/* User Profile Form */}
       {currentUser.role === 'USER' && userProfile && (
         <Tabs defaultValue="emergency-info" className="max-w-3xl mx-auto">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="emergency-info">Emergency Information</TabsTrigger>
             <TabsTrigger value="doctor-info">Medical Information</TabsTrigger>
+            <TabsTrigger value="security">Security & Keys</TabsTrigger>
           </TabsList>
           
           {/* Emergency Information Tab */}
@@ -821,6 +863,119 @@ const EditProfile = () => {
                   {saving ? 'Saving...' : 'Save Medical Information'}
                 </Button>
               </CardFooter>
+            </Card>
+          </TabsContent>
+
+          {/* Security & Key Status Tab */}
+          <TabsContent value="security">
+            <Card>
+              <CardHeader>
+                <CardTitle>Security & Key Status</CardTitle>
+                <CardDescription>
+                  Your cryptographic identity used for NFC tag signing and verification
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Key Pair Status */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Local Key Pair</h3>
+                  <div className={`flex items-start gap-3 p-4 rounded-lg border-l-4 ${
+                    keyLoading
+                      ? 'border-gray-300 bg-gray-50'
+                      : keyExists
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-amber-500 bg-amber-50'
+                  }`}>
+                    {keyLoading ? (
+                      <p className="text-sm text-gray-500">Checking key status…</p>
+                    ) : keyExists ? (
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">
+                          🔑 ECDSA P-256 Key Pair Found
+                        </p>
+                        <p className="text-xs text-green-700 mt-1 font-mono">
+                          Fingerprint: {publicKeyFingerprint}…
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800">
+                          ⚠️ No Key Pair Found
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          A key pair will be generated when you write your first NFC tag.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={async () => {
+                            setKeyLoading(true);
+                            try {
+                              await NfcCryptoService.getOrCreateKeyPair();
+                              const stored = localStorage.getItem('lifetag_ecdsa_keypair');
+                              if (stored) {
+                                setKeyExists(true);
+                                const parsed = JSON.parse(stored);
+                                setPublicKeyFingerprint((parsed.publicKey?.x || '').substring(0, 16));
+                              }
+                              toast.success('Key pair generated successfully');
+                            } catch {
+                              toast.error('Failed to generate key pair');
+                            } finally {
+                              setKeyLoading(false);
+                            }
+                          }}
+                        >
+                          Generate Key Pair Now
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Authority Registration Status */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Healthcare Authority Registration</h3>
+                  <div className={`flex items-start gap-3 p-4 rounded-lg border-l-4 ${
+                    authorityRegistered
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-amber-500 bg-amber-50'
+                  }`}>
+                    {authorityRegistered ? (
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">
+                          🏥 Registered with Healthcare Authority
+                        </p>
+                        <p className="text-xs text-green-700 mt-1">
+                          Your public key has been certified. NFC tags signed with your key will show as "Authority Certified" to responders.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-semibold text-amber-800">
+                          ⏳ Pending Registration
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Your key has not yet been certified by a Healthcare Authority. Tags will show as "Self-Signed" until registered.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>What does this mean?</strong> Your key pair is used to digitally sign the medical data on your NFC tag.
+                    When a first responder scans your tag, the signature is verified to ensure the data hasn't been tampered with.
+                    Authority registration adds a second layer of trust, confirming your identity through a Healthcare Authority.
+                  </p>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>

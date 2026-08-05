@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserFullProfile, UserProfile } from '@/services/userService';
 import { Badge } from '@/components/ui/badge';
+import TrustBadge from '@/components/nfc/TrustBadge';
 
 const MedicalInfo = () => {
   const { accountId } = useParams<{ accountId: string }>();
@@ -103,6 +104,14 @@ const MedicalInfo = () => {
         ) : null}
         
         {profile && (
+          <>
+            <TrustBadge
+              status={
+                profile.authoritySignature
+                  ? 'authority-certified'
+                  : 'server-verified'
+              }
+            />
           <Tabs defaultValue="emergency" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="emergency">Emergency Information</TabsTrigger>
@@ -369,6 +378,7 @@ const MedicalInfo = () => {
               </Card>
             </TabsContent>
           </Tabs>
+          </>
         )}
         
         <div className="flex justify-center mt-8">

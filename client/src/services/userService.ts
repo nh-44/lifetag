@@ -11,6 +11,7 @@ export interface EmergencyInfo {
   dnrStatus: boolean;
   primaryPhysician: { userId: string; name: string };
   insuranceId: string;
+  authoritySignature?: string;
 }
 
 export interface DoctorOnlyInfo {
