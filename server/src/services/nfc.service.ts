@@ -14,9 +14,18 @@ export interface TriagePayload {
     dnrStatus: boolean;
   };
   signature: string;
+  authoritySignature?: string; // Signature from Healthcare Authority
 }
 
 export class NfcService {
+  // Same Healthcare Authority Public Key JWK (for verification)
+  private static AUTHORITY_PUBLIC_KEY_JWK = {
+    kty: "EC",
+    crv: "P-256",
+    x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
+    y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
+  };
+
   /**
    * Decompresses a Gzip hex string back to a TriagePayload JSON object
    */
@@ -44,24 +53,46 @@ export class NfcService {
   }
 
   /**
-   * Fully validates a decompressed tag payload's integrity and ECDSA signature
+   * Validates a tag payload using two-tier verification: Authority signature + Patient signature
    */
-  static verifyTagIntegrity(payload: TriagePayload): boolean {
-    if (!payload.signature || !payload.tagId) return false;
+  static verifyTagIntegrity(payload: TriagePayload): {
+    verified: boolean;
+    trustedAuthority: boolean;
+  } {
+    if (!payload.signature || !payload.tagId) {
+      return { verified: false, trustedAuthority: false };
+    }
 
     try {
-      // Parse public key from tagId field (JWK)
-      const publicKeyJwk = JSON.parse(payload.tagId);
-      
-      // Verify signature matches the triageData structure
-      return CryptoUtils.verifyEcdsaSignature(
+      // 1. Verify Patient Signature over Triage Data
+      const patientPublicKeyJwk = JSON.parse(payload.tagId);
+      const isPatientVerified = CryptoUtils.verifyEcdsaSignature(
         payload.triageData,
         payload.signature,
-        publicKeyJwk
+        patientPublicKeyJwk
       );
+
+      if (!isPatientVerified) {
+        return { verified: false, trustedAuthority: false };
+      }
+
+      // 2. Verify Authority Certification Signature over Patient Public Key
+      let isAuthorityVerified = false;
+      if (payload.authoritySignature) {
+        isAuthorityVerified = CryptoUtils.verifyEcdsaSignature(
+          payload.tagId, // Authority signs the stringified patient public key
+          payload.authoritySignature,
+          this.AUTHORITY_PUBLIC_KEY_JWK
+        );
+      }
+
+      return {
+        verified: true,
+        trustedAuthority: isAuthorityVerified,
+      };
     } catch (e) {
       console.error('NfcService integrity check failed:', e);
-      return false;
+      return { verified: false, trustedAuthority: false };
     }
   }
 

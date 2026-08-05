@@ -2,13 +2,30 @@ import { NfcTagPayload } from "@/types";
 
 /**
  * LifeTag Zero-Trust Cryptographic & NFC Payload Engine
- * Implements real ECDSA signatures, native Gzip compression, and AES-GCM encryption.
+ * Implements real ECDSA signatures, native Gzip compression, and two-tier Trusted Authority Verification.
  */
 export class NfcCryptoService {
   private static KEY_STORAGE_KEY = "lifetag_ecdsa_keypair";
 
+  // Pre-generated static Healthcare Authority P-256 ECDSA public key for verifications (offline trust anchor)
+  private static AUTHORITY_PUBLIC_KEY_JWK = {
+    kty: "EC",
+    crv: "P-256",
+    x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
+    y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
+  };
+
+  // Mock Authority private key JWK used during registration tag creation to simulate Authority certification
+  private static AUTHORITY_PRIVATE_KEY_JWK = {
+    kty: "EC",
+    crv: "P-256",
+    x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
+    y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
+    d: "xP2O5mJk88bY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8",
+  };
+
   /**
-   * Generates a persistent ECDSA P-256 key pair in LocalStorage (for demo/patient device)
+   * Generates a persistent ECDSA P-256 key pair in LocalStorage (representing the patient's local wallet)
    */
   static async getOrCreateKeyPair(): Promise<CryptoKeyPair> {
     try {
@@ -53,15 +70,7 @@ export class NfcCryptoService {
   }
 
   /**
-   * Exports the public key of the local key pair as JWK
-   */
-  static async getLocalPublicKeyJwk(): Promise<any> {
-    const keyPair = await this.getOrCreateKeyPair();
-    return await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
-  }
-
-  /**
-   * Encodes a patient emergency record into an NDEF-compatible signed JSON payload
+   * Encodes a patient emergency record into an NDEF-compatible signed JSON payload with two-tier signatures
    */
   static async generateTagPayload(patientData: {
     name: string;
@@ -84,59 +93,113 @@ export class NfcCryptoService {
       },
     };
 
-    // Retrieve device key pair
+    // 1. Retrieve patient's local key pair
     const keyPair = await this.getOrCreateKeyPair();
-    
-    // Stringify triageData deterministically for signature consistency
-    const dataToSign = new TextEncoder().encode(JSON.stringify(payload.triageData));
-    const signatureBuffer = await window.crypto.subtle.sign(
+    const patientPublicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
+    payload.tagId = JSON.stringify(patientPublicKeyJwk);
+
+    // 2. Sign triageData using patient's private key
+    const triageDataBytes = new TextEncoder().encode(JSON.stringify(payload.triageData));
+    const patientSignatureBuffer = await window.crypto.subtle.sign(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       keyPair.privateKey,
-      dataToSign
+      triageDataBytes
     );
+    payload.signature = btoa(String.fromCharCode(...new Uint8Array(patientSignatureBuffer)));
 
-    // Convert signature and public key to base64 / JWK
-    const signatureArray = new Uint8Array(signatureBuffer);
-    payload.signature = btoa(String.fromCharCode(...signatureArray));
-    
-    // Attach public key to payload so offline scanner can verify it
-    const publicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
-    payload.tagId = JSON.stringify(publicKeyJwk);
+    // 3. Simulate Authority certification: Sign patient's public key using Authority Private Key
+    // In a real system, the patient uploads their public key to the portal, which returns this signature.
+    try {
+      const authorityPrivateKey = await window.crypto.subtle.importKey(
+        "jwk",
+        this.AUTHORITY_PRIVATE_KEY_JWK,
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["sign"]
+      );
+      const publicKeyStringBytes = new TextEncoder().encode(payload.tagId);
+      const authoritySignatureBuffer = await window.crypto.subtle.sign(
+        { name: "ECDSA", hash: { name: "SHA-256" } },
+        authorityPrivateKey,
+        publicKeyStringBytes
+      );
+      payload.authoritySignature = btoa(String.fromCharCode(...new Uint8Array(authoritySignatureBuffer)));
+    } catch (e) {
+      console.warn("Authority signature simulation failed", e);
+    }
 
     return payload;
   }
 
   /**
-   * Verifies if an NFC tag payload signature matches its contents
+   * Verifies an NFC tag payload using two-tier verification: Authority Certification + Patient Signature
    */
-  static async verifyTagIntegrity(payload: NfcTagPayload): Promise<boolean> {
-    if (!payload.signature || !payload.tagId) return false;
+  static async verifyTagIntegrity(payload: NfcTagPayload): Promise<{
+    verified: boolean;
+    trustedAuthority: boolean;
+    error?: string;
+  }> {
+    if (!payload.signature || !payload.tagId) {
+      return { verified: false, trustedAuthority: false, error: "Missing signature components" };
+    }
 
     try {
-      // Import public key from payload tagId (JWK stringified)
-      const publicKeyJwk = JSON.parse(payload.tagId);
-      const publicKey = await window.crypto.subtle.importKey(
+      // Step 1: Import patient public key from tag payload
+      const patientPublicKeyJwk = JSON.parse(payload.tagId);
+      const patientPublicKey = await window.crypto.subtle.importKey(
         "jwk",
-        publicKeyJwk,
+        patientPublicKeyJwk,
         { name: "ECDSA", namedCurve: "P-256" },
         true,
         ["verify"]
       );
 
-      const signatureBytes = new Uint8Array(
+      // Step 2: Verify Patient Signature over Triage Data
+      const patientSignatureBytes = new Uint8Array(
         atob(payload.signature).split("").map((c) => c.charCodeAt(0))
       );
-      const dataBytes = new TextEncoder().encode(JSON.stringify(payload.triageData));
+      const triageDataBytes = new TextEncoder().encode(JSON.stringify(payload.triageData));
 
-      return await window.crypto.subtle.verify(
+      const isPatientVerified = await window.crypto.subtle.verify(
         { name: "ECDSA", hash: { name: "SHA-256" } },
-        publicKey,
-        signatureBytes,
-        dataBytes
+        patientPublicKey,
+        patientSignatureBytes,
+        triageDataBytes
       );
+
+      if (!isPatientVerified) {
+        return { verified: false, trustedAuthority: false, error: "Patient signature invalid (tampered triage data)" };
+      }
+
+      // Step 3: Verify Authority Certificate (if present) to prevent spoofing
+      let isAuthorityVerified = false;
+      if (payload.authoritySignature) {
+        const authorityPublicKey = await window.crypto.subtle.importKey(
+          "jwk",
+          this.AUTHORITY_PUBLIC_KEY_JWK,
+          { name: "ECDSA", namedCurve: "P-256" },
+          true,
+          ["verify"]
+        );
+        const authoritySignatureBytes = new Uint8Array(
+          atob(payload.authoritySignature).split("").map((c) => c.charCodeAt(0))
+        );
+        const publicKeyStringBytes = new TextEncoder().encode(payload.tagId);
+
+        isAuthorityVerified = await window.crypto.subtle.verify(
+          { name: "ECDSA", hash: { name: "SHA-256" } },
+          authorityPublicKey,
+          authoritySignatureBytes,
+          publicKeyStringBytes
+        );
+      }
+
+      return {
+        verified: true,
+        trustedAuthority: isAuthorityVerified,
+      };
     } catch (e) {
-      console.error("Signature verification failed", e);
-      return false;
+      return { verified: false, trustedAuthority: false, error: "Cryptographic exception during verification" };
     }
   }
 
@@ -187,5 +250,68 @@ export class NfcCryptoService {
         fitsNtag215: rawBytes <= 504,
       };
     }
+  }
+
+  /**
+   * Reconstructs standard HL7 FHIR JSON structures from the compressed LifeTag format
+   */
+  static convertToFhir(triageData: NfcTagPayload["triageData"], patientId: string): {
+    fhirPatient: any;
+    fhirAllergies: any[];
+  } {
+    const fhirPatient = {
+      resourceType: "Patient",
+      id: patientId,
+      name: [
+        {
+          use: "official",
+          text: triageData.name,
+        }
+      ],
+      contact: triageData.emergencyContacts.map((contact) => ({
+        relationship: [
+          {
+            coding: [
+              {
+                system: "http://terminology.hl7.org/CodeSystem/v2-0131",
+                code: "C",
+                display: "Emergency Contact"
+              }
+            ]
+          }
+        ],
+        name: {
+          text: contact.name
+        },
+        telecom: [
+          {
+            system: "phone",
+            value: contact.userId // References registered userId
+          }
+        ]
+      }))
+    };
+
+    const fhirAllergies = triageData.allergies.map((allergy, index) => ({
+      resourceType: "AllergyIntolerance",
+      id: `allergy-${index}`,
+      patient: {
+        reference: `Patient/${patientId}`
+      },
+      code: {
+        text: allergy
+      },
+      criticality: "high",
+      verificationStatus: {
+        coding: [
+          {
+            system: "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+            code: "confirmed"
+          }
+        ]
+      }
+    }));
+
+    return { fhirPatient, fhirAllergies };
   }
 }

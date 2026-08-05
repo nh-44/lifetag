@@ -107,6 +107,7 @@ export interface NfcTagPayload {
     dnrStatus: boolean;
   };
   signature?: string; // Digital ECDSA signature for on-tag payload integrity
+  authoritySignature?: string; // Healthcare Authority signature certifying patient key
   encryptedMedicalPayload?: string; // AES-GCM encrypted block for verified doctors
 }
 
