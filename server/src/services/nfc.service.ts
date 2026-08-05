@@ -12,7 +12,6 @@ export interface TriagePayload {
     allergies: string[];
     emergencyContacts: any[];
     dnrStatus: boolean;
-    organDonor: boolean;
   };
   signature: string;
 }

@@ -67,9 +67,8 @@ export class NfcCryptoService {
     name: string;
     bloodGroup: string;
     allergies: string[];
-    emergencyContacts: Array<{ name: string; phone: string; relation: string }>;
+    emergencyContacts: Array<{ userId: string; name: string }>;
     dnrStatus: boolean;
-    organDonor: boolean;
     fhirPatientId: string;
   }): Promise<NfcTagPayload> {
     const payload: NfcTagPayload = {
@@ -82,7 +81,6 @@ export class NfcCryptoService {
         allergies: patientData.allergies,
         emergencyContacts: patientData.emergencyContacts,
         dnrStatus: patientData.dnrStatus,
-        organDonor: patientData.organDonor,
       },
     };
 

@@ -23,11 +23,10 @@ const samplePayload: TriagePayload = {
     bloodGroup: 'O-Negative',
     allergies: ['Penicillin', 'Peanuts', 'Bee Stings'],
     emergencyContacts: [
-      { name: 'Jane Doe', phone: '+1-555-0199', relation: 'Spouse' },
-      { name: 'Dr. Sarah Jenkins', phone: '+1-555-0210', relation: 'Physician' }
+      { userId: 'US98234', name: 'Jane Doe' },
+      { userId: 'US54321', name: 'Bob Smith' }
     ],
     dnrStatus: true,
-    organDonor: true,
   },
   signature: 'MEQCIDV4nJz8tY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8AiA7tP2O5mJk88bY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8',
 };

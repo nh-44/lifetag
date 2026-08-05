@@ -103,9 +103,8 @@ export interface NfcTagPayload {
     name: string;
     bloodGroup: string;
     allergies: string[];
-    emergencyContacts: Array<{ name: string; phone: string; relation: string }>;
+    emergencyContacts: Array<{ userId: string; name: string }>;
     dnrStatus: boolean;
-    organDonor: boolean;
   };
   signature?: string; // Digital ECDSA signature for on-tag payload integrity
   encryptedMedicalPayload?: string; // AES-GCM encrypted block for verified doctors
