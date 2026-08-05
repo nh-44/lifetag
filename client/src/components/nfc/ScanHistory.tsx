@@ -69,7 +69,7 @@ const ScanHistory = ({ visible }: ScanHistoryProps) => {
               {scanHistory.map((record, index) => {
                 const date = new Date(record.timestamp);
                 return (
-                  <TableRow key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                  <TableRow key={`${record.accountId}-${record.timestamp}`} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                     <TableCell className="font-medium text-blue-700">{record.accountId}</TableCell>
                     <TableCell>{date.toLocaleDateString()}</TableCell>
                     <TableCell>{date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</TableCell>

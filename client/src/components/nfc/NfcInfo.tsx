@@ -3,13 +3,18 @@ import { ExternalLink, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { NfcTagPayload } from "@/types";
 
 interface NfcInfoProps {
   accountId: string | null;
   url: string | null;
+  payload?: NfcTagPayload | null;
 }
 
-const NfcInfo = ({ accountId, url }: NfcInfoProps) => {
+const NfcInfo = ({ accountId, url, payload }: NfcInfoProps) => {
+  const navigate = useNavigate();
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
@@ -53,7 +58,7 @@ const NfcInfo = ({ accountId, url }: NfcInfoProps) => {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => window.open(url, "_blank")}
+                onClick={() => navigate(`/emergency-info/${accountId}`, { state: { tagPayload: payload } })}
                 title="Open URL"
               >
                 <ExternalLink size={16} />

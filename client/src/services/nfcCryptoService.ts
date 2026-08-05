@@ -15,14 +15,7 @@ export class NfcCryptoService {
     y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
   };
 
-  // Mock Authority private key JWK used during registration tag creation to simulate Authority certification
-  private static AUTHORITY_PRIVATE_KEY_JWK = {
-    kty: "EC",
-    crv: "P-256",
-    x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
-    y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
-    d: "xP2O5mJk88bY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8",
-  };
+  // Mock Authority private key JWK removed; backend provides real signature
 
   /**
    * Generates a persistent ECDSA P-256 key pair in LocalStorage (representing the patient's local wallet)
@@ -79,6 +72,7 @@ export class NfcCryptoService {
     emergencyContacts: Array<{ userId: string; name: string }>;
     dnrStatus: boolean;
     fhirPatientId: string;
+    authoritySignature?: string;
   }): Promise<NfcTagPayload> {
     const payload: NfcTagPayload = {
       version: '2.0',
@@ -107,25 +101,9 @@ export class NfcCryptoService {
     );
     payload.signature = btoa(String.fromCharCode(...new Uint8Array(patientSignatureBuffer)));
 
-    // 3. Simulate Authority certification: Sign patient's public key using Authority Private Key
-    // In a real system, the patient uploads their public key to the portal, which returns this signature.
-    try {
-      const authorityPrivateKey = await window.crypto.subtle.importKey(
-        "jwk",
-        this.AUTHORITY_PRIVATE_KEY_JWK,
-        { name: "ECDSA", namedCurve: "P-256" },
-        true,
-        ["sign"]
-      );
-      const publicKeyStringBytes = new TextEncoder().encode(payload.tagId);
-      const authoritySignatureBuffer = await window.crypto.subtle.sign(
-        { name: "ECDSA", hash: { name: "SHA-256" } },
-        authorityPrivateKey,
-        publicKeyStringBytes
-      );
-      payload.authoritySignature = btoa(String.fromCharCode(...new Uint8Array(authoritySignatureBuffer)));
-    } catch (e) {
-      console.warn("Authority signature simulation failed", e);
+    // 3. Attach Authority certification from backend (if available)
+    if (patientData.authoritySignature) {
+      payload.authoritySignature = patientData.authoritySignature;
     }
 
     return payload;

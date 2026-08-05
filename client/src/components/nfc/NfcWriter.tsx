@@ -1,9 +1,10 @@
-
 import { useState, useEffect } from "react";
 import { Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { NfcCryptoService } from "@/services/nfcCryptoService";
+import { fetchWithAuth } from "@/services/api";
 
 interface NfcWriterProps {
   onWriteComplete: (accountId: string) => void;
@@ -36,48 +37,77 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
     setIsWriting(true);
 
     try {
+      // 1. Fetch real patient triage profile
+      const response = await fetchWithAuth(`/patients/triage/${accountId}`);
+      if (!response.success || !response.data) {
+        throw new Error(response.error?.message || "Failed to fetch patient data");
+      }
+      
+      const patientData = response.data;
+
+      // 2. Generate the payload using the crypto service
+      const payload = await NfcCryptoService.generateTagPayload({
+        name: patientData.name,
+        bloodGroup: patientData.bloodGroup,
+        allergies: patientData.allergies,
+        emergencyContacts: patientData.emergencyContacts,
+        dnrStatus: patientData.dnrStatus,
+        fhirPatientId: patientData.accountId,
+        authoritySignature: patientData.authoritySignature,
+      });
+
+      // 3. Check the byte size limit
+      const { rawBytes } = await NfcCryptoService.calculateByteSize(payload);
+      
+      if (rawBytes > 504) {
+        const errorMsg = `Payload too large (${rawBytes} bytes). Max limit is 504 bytes.`;
+        toast.error(errorMsg);
+        onWriteError(errorMsg);
+        setIsWriting(false);
+        return;
+      }
+
+      const payloadString = JSON.stringify(payload);
+
       if (isNfcSupported) {
         // @ts-ignore - NDEFReader is not in TypeScript's lib.dom yet
         const ndef = new NDEFReader();
         
-        toast.info("Hold an NFC tag near your device...");
+        toast.info(`Hold an NFC tag near your device... (${rawBytes} bytes)`);
         
-        // Improved writing format - ensure we write as plain text
-        // Create a proper text record with the account ID
+        // 4. Write the JSON payload as a text record
         await ndef.write({
           records: [{ 
             recordType: "text", 
-            data: accountId,
-            lang: "en" // Explicitly set language code
+            data: payloadString,
+            lang: "en" 
           }]
         });
         
-        console.log("Successfully wrote to NFC tag:", accountId);
+        console.log("Successfully wrote to NFC tag:", payload);
         onWriteComplete(accountId);
         toast.success("Account ID written successfully!");
       } else {
         // Simulate writing for unsupported browsers
+        toast.info(`Simulating NFC write... (${rawBytes} bytes)`);
         setTimeout(() => {
-          if (Math.random() > 0.2) {
-            onWriteComplete(accountId);
-            toast.success("Account ID written successfully!");
-          } else {
-            const errors = [
-              "Tag not writable",
-              "Tag moved too quickly",
-              "Write failed",
-              "Tag not compatible"
-            ];
-            const error = errors[Math.floor(Math.random() * errors.length)];
-            onWriteError(error);
-            toast.error(`Write failed: ${error}`);
-          }
+          onWriteComplete(accountId);
+          toast.success("Simulation: Account ID written successfully!");
         }, 2000);
       }
     } catch (error: any) {
       console.error("NFC Write Error:", error);
-      onWriteError(error.message || "Failed to write to NFC tag");
-      toast.error(`Write failed: ${error.message || "Unknown error"}`);
+      
+      // Handle permission denied and other standard errors
+      let errorMessage = error.message || "Failed to write to NFC tag";
+      if (error.name === 'NotAllowedError') {
+        errorMessage = "NFC permission denied. Please allow NFC access.";
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = "NFC is not supported on this device.";
+      }
+      
+      onWriteError(errorMessage);
+      toast.error(`Write failed: ${errorMessage}`);
     } finally {
       setIsWriting(false);
     }

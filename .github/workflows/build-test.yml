@@ -31,6 +31,11 @@ jobs:
         cd client
         npm run build
 
+    - name: Run Client Tests
+      run: |
+        cd client
+        npm run test -- --run
+
   build-server:
     name: Build Express Server
     runs-on: ubuntu-latest

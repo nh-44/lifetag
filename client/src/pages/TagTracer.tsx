@@ -7,6 +7,7 @@ import NfcScanner from "@/components/nfc/NfcScanner";
 import AdminPanel from "@/components/nfc/AdminPanel";
 import ScanHistory from "@/components/nfc/ScanHistory";
 import { History, ShieldCheck } from "lucide-react";
+import { NfcTagPayload } from "@/types";
 
 interface ScanRecord {
   accountId: string;
@@ -16,12 +17,14 @@ interface ScanRecord {
 const TagTracer = () => {
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
   const [lastScannedUrl, setLastScannedUrl] = useState<string | null>(null);
+  const [lastScannedPayload, setLastScannedPayload] = useState<NfcTagPayload | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
-  const handleScan = (accountId: string) => {
+  const handleScan = (accountId: string, payload: NfcTagPayload) => {
     setLastScannedId(accountId);
+    setLastScannedPayload(payload);
     const url = `/emergency-info/${accountId}`;
     setLastScannedUrl(window.location.origin + url);
     setIsScanning(false);
@@ -137,6 +140,7 @@ const TagTracer = () => {
         <NfcInfo 
           accountId={lastScannedId} 
           url={lastScannedUrl} 
+          payload={lastScannedPayload}
         />
       )}
       
