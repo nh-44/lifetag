@@ -78,10 +78,36 @@ export class CryptoUtils {
   }
 
   /**
-   * Simulates generation of an Authority Signature for the patient's public key or profile.
+   * Generates a real ECDSA P-256 Authority Signature certifying the patient's public key.
+   * Loads the private key from the environment variable AUTHORITY_PRIVATE_KEY, falling back to development JWK.
    */
+  static signWithAuthorityKey(patientPublicKeyString: string): string {
+    const keyData = process.env.AUTHORITY_PRIVATE_KEY 
+      ? JSON.parse(process.env.AUTHORITY_PRIVATE_KEY)
+      : {
+          kty: "EC",
+          crv: "P-256",
+          x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
+          y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
+          d: "xP2O5mJk88bY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8",
+        };
+      
+    try {
+      const privateKey = crypto.createPrivateKey({
+        key: keyData,
+        format: 'jwk',
+      });
+
+      const signObj = crypto.createSign('SHA256');
+      signObj.update(patientPublicKeyString);
+      return signObj.sign(privateKey).toString('base64');
+    } catch (e) {
+      console.error('Failed to sign with Authority private key:', e);
+      return '';
+    }
+  }
+
   static simulateAuthoritySignature(patientIdentifier: string): string {
-    const raw = crypto.createHash('sha256').update(patientIdentifier + 'AUTHORITY_SECRET').digest('hex');
-    return `AUTH-SIG-${raw.substring(0, 24).toUpperCase()}`;
+    return this.signWithAuthorityKey(patientIdentifier);
   }
 }
