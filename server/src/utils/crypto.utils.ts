@@ -20,7 +20,9 @@ export class CryptoUtils {
         format: 'jwk',
       });
 
-      const dataBuffer = Buffer.from(JSON.stringify(triageData));
+      const dataBuffer = typeof triageData === 'string'
+        ? Buffer.from(triageData, 'utf8')
+        : Buffer.from(JSON.stringify(triageData));
       const signatureBuffer = Buffer.from(signatureBase64, 'base64');
 
       return crypto.verify(
@@ -87,9 +89,9 @@ export class CryptoUtils {
       : {
           kty: "EC",
           crv: "P-256",
-          x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
-          y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
-          d: "xP2O5mJk88bY1L5T47DsqR_1T8N3rL6u7t3o0F_z_E8",
+          x: "Sy52YAL3SADCzj6OTAiLmHGTiJR3-AjJimHizE3n3Eg",
+          y: "KHaR_N-H8tgqAy4zKrzs64HN1PBy-1mEQHDL5SzLXOU",
+          d: "JEwxtqk-7PkCzRhgSL1BU21QeQt1lT_AWjTbFgPA_Tc",
         };
       
     try {

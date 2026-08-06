@@ -22,8 +22,8 @@ export class NfcService {
   private static AUTHORITY_PUBLIC_KEY_JWK = {
     kty: "EC",
     crv: "P-256",
-    x: "MKBCTNIcKXY0Q1d5UDQ3R3NxUl8xVDhOM3JMNnU3dDNvRl96X0U4",
-    y: "cVAyTzVtSms4OGJZMkw1VDQ3RHNxUl8xVDhOM3JMNnU3dDNvRl96",
+    x: "Sy52YAL3SADCzj6OTAiLmHGTiJR3-AjJimHizE3n3Eg",
+    y: "KHaR_N-H8tgqAy4zKrzs64HN1PBy-1mEQHDL5SzLXOU",
   };
 
   /**

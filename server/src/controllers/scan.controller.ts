@@ -1,16 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
 import { scanService } from '../services/scan.service';
 import { sendSuccess } from '../utils/response.utils';
+import { NfcService } from '../services/nfc.service';
 
 export const scanController = {
   logScan: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { patientAccount, deviceMeta, tagPayload } = req.body;
-      let finalDeviceMeta = deviceMeta || '';
       
-      if (tagPayload && tagPayload.authoritySignature) {
+      if (!tagPayload || !tagPayload.signature || !tagPayload.tagId) {
+        throw { statusCode: 400, message: 'Cryptographic proof of physical NFC tag proximity is required.' };
+      }
+
+      // Verify tag integrity
+      const { verified, trustedAuthority } = NfcService.verifyTagIntegrity(tagPayload);
+      if (!verified) {
+        throw { statusCode: 400, message: 'Invalid tag signature. Cryptographic verification failed.' };
+      }
+
+      let finalDeviceMeta = deviceMeta || '';
+      if (trustedAuthority) {
         finalDeviceMeta += ' [Authority-Certified]';
-      } else if (tagPayload) {
+      } else {
         finalDeviceMeta += ' [Self-Signed]';
       }
       
