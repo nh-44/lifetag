@@ -6,7 +6,8 @@ import AdminPanel from './AdminPanel';
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children, open, onOpenChange }: any) => (
     <div data-testid="dialog">
-      {open ? children : null}
+      {open && children}
+      <button data-testid="dialog-close-mock" onClick={() => onOpenChange(false)}>Close</button>
     </div>
   ),
   DialogContent: ({ children }: any) => <div data-testid="dialog-content">{children}</div>,
@@ -65,5 +66,78 @@ describe('AdminPanel', () => {
     
     expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
     expect(mockOnAuthChange).toHaveBeenCalledWith(true);
+  });
+
+  it('handles write success callback from NfcWriter', () => {
+    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
+    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    
+    fireEvent.click(screen.getByText('Mock Write'));
+    
+    expect(mockOnWriteComplete).toHaveBeenCalledWith('12345');
+    // The dialog should close automatically after successful write
+    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
+  });
+
+  it('authenticates when pressing Enter key on password input', () => {
+    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
+    
+    const input = screen.getByPlaceholderText('Enter admin password');
+    fireEvent.change(input, { target: { value: '00000' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    
+    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
+  });
+
+  it('handles logout and clears authentication', () => {
+    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
+    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    
+    // Auth success
+    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
+    
+    // Click Logout
+    fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
+    
+    // Dialog closes
+    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
+    expect(mockOnAuthChange).toHaveBeenCalledWith(false);
+  });
+
+  it('handles dialog close without authenticating', () => {
+    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
+    
+    expect(screen.getByPlaceholderText('Enter admin password')).toBeInTheDocument();
+    
+    // Close dialog
+    fireEvent.click(screen.getByTestId('dialog-close-mock'));
+    
+    expect(screen.queryByPlaceholderText('Enter admin password')).not.toBeInTheDocument();
+    expect(mockOnAuthChange).toHaveBeenCalledWith(false);
+  });
+
+  it('handles dialog close while authenticated', () => {
+    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
+    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
+    
+    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
+    
+    // Close dialog
+    fireEvent.click(screen.getByTestId('dialog-close-mock'));
+    
+    // Should still be authenticated for next time it opens
+    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
+    
+    // Re-open
+    fireEvent.click(screen.getByRole('button', { name: /Admin Panel/i }));
+    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
   });
 });

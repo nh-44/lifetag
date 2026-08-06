@@ -185,4 +185,77 @@ describe('NfcScanner', () => {
       expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("No JSON found"));
     });
   });
+
+  it('handles NFC permission denied', async () => {
+    const mockScan = vi.fn().mockRejectedValue(new Error("NFC Permission Denied"));
+    class MockNDEFReader {
+      scan = mockScan;
+      addEventListener = vi.fn();
+    }
+    vi.stubGlobal('NDEFReader', MockNDEFReader);
+
+    render(<NfcScanner isScanning={true} onScanComplete={mockOnScanComplete} onScanError={mockOnScanError} />);
+    
+    await waitFor(() => {
+      expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("Permission Denied"));
+    });
+  });
+
+  it('handles missing patient ID in payload', async () => {
+    let readingCallback: any = null;
+    const mockScan = vi.fn().mockResolvedValue(undefined);
+    class MockNDEFReader {
+      scan = mockScan;
+      addEventListener = vi.fn((event, cb) => { if (event === 'reading') readingCallback = cb; });
+    }
+    vi.stubGlobal('NDEFReader', MockNDEFReader);
+
+    vi.spyOn(NfcCryptoService, 'verifyTagIntegrity').mockResolvedValue({ verified: true, trustedAuthority: true });
+    render(<NfcScanner isScanning={true} onScanComplete={mockOnScanComplete} onScanError={mockOnScanError} />);
+
+    await waitFor(() => expect(readingCallback).toBeTruthy());
+
+    // Payload missing fhirPatientId
+    const mockPayload = { version: "2.0" }; 
+    const encoder = new TextEncoder();
+    
+    await act(async () => {
+      await readingCallback({
+        message: { records: [{ recordType: 'text', data: encoder.encode(JSON.stringify(mockPayload)).buffer }] }
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("Missing patient ID"));
+    });
+  });
+
+  it('handles invalid 5-digit patient ID', async () => {
+    let readingCallback: any = null;
+    const mockScan = vi.fn().mockResolvedValue(undefined);
+    class MockNDEFReader {
+      scan = mockScan;
+      addEventListener = vi.fn((event, cb) => { if (event === 'reading') readingCallback = cb; });
+    }
+    vi.stubGlobal('NDEFReader', MockNDEFReader);
+
+    vi.spyOn(NfcCryptoService, 'verifyTagIntegrity').mockResolvedValue({ verified: true, trustedAuthority: true });
+    render(<NfcScanner isScanning={true} onScanComplete={mockOnScanComplete} onScanError={mockOnScanError} />);
+
+    await waitFor(() => expect(readingCallback).toBeTruthy());
+
+    // Payload with invalid patient ID
+    const mockPayload = { fhirPatientId: "123" }; 
+    const encoder = new TextEncoder();
+    
+    await act(async () => {
+      await readingCallback({
+        message: { records: [{ recordType: 'text', data: encoder.encode(JSON.stringify(mockPayload)).buffer }] }
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("exactly 5 digits"));
+    });
+  });
 });

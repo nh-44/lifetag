@@ -3,9 +3,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import NfcWriter from './NfcWriter';
 import { NfcCryptoService } from '@/services/nfcCryptoService';
 import { fetchWithAuth } from '@/services/api';
+import { toast } from 'sonner';
 
 vi.mock('@/services/api', () => ({
   fetchWithAuth: vi.fn()
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn()
+  }
 }));
 
 describe('NfcWriter', () => {
@@ -114,6 +123,43 @@ describe('NfcWriter', () => {
     await waitFor(() => {
       expect(mockOnWriteError).toHaveBeenCalledWith(expect.stringContaining('Payload too large'));
       expect(mockWrite).not.toHaveBeenCalled();
+    });
+  });
+
+  it('shows error for invalid account ID', () => {
+    render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
+    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
+    fireEvent.change(input, { target: { value: '1234' } }); // Only 4 digits
+    const btn = screen.getByRole('button', { name: /^Write/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it('handles backend API failure', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
+      success: false,
+      error: { message: "Patient not found" }
+    });
+    
+    render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
+    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
+
+    await waitFor(() => {
+      expect(mockOnWriteError).toHaveBeenCalledWith('Patient not found');
+    });
+  });
+
+  it('handles NFC permission denied or write failure', async () => {
+    const mockWrite = vi.fn().mockRejectedValue(new Error("NFC Permission Denied"));
+    class MockNDEFReader { write = mockWrite; }
+    vi.stubGlobal('NDEFReader', MockNDEFReader);
+
+    render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
+    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
+
+    await waitFor(() => {
+      expect(mockOnWriteError).toHaveBeenCalledWith('NFC Permission Denied');
     });
   });
 });
