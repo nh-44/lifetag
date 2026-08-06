@@ -12,7 +12,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "lint": "eslint . --ext .ts",
-    "test:security": "ts-node src/utils/security.spec.ts"
+    "test:security": "ts-node src/utils/security.spec.ts",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force"
   },
   "keywords": [
     "lifetag",
@@ -49,5 +51,8 @@
     "prisma": "^5.19.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.5.4"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
