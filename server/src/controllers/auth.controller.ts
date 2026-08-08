@@ -37,5 +37,25 @@ export const authController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  refresh: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { refreshToken } = req.body;
+      const result = await authService.refresh(refreshToken);
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  logout: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { refreshToken } = req.body;
+      const result = await authService.logout(refreshToken);
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
   }
 };

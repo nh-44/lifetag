@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -5,6 +6,10 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting database seeding...');
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Database seeding is disabled in production environments.');
+  }
 
   // 1. Clear existing database records
   await prisma.scanAuditLog.deleteMany({});
@@ -17,7 +22,7 @@ async function main() {
   console.log('🧹 Cleaned existing database tables.');
 
   // Common password hash for test users
-  const passwordHash = await bcrypt.hash('password123', 10);
+  const passwordHash = await bcrypt.hash('password123', 12);
 
   // 2. Create User Profiles (Patients)
   const patient1 = await prisma.user.create({

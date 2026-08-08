@@ -12,5 +12,7 @@ router.post('/login', authLimiter, validate(LoginRequestSchema), authController.
 router.post('/signup', authLimiter, validate(SignupRequestSchema), authController.signup);
 router.get('/check/:userId', authController.checkAvailability);
 router.get('/me', authMiddleware, authController.me);
+router.post('/refresh', authController.refresh);
+router.post('/logout', authController.logout);
 
 export default router;

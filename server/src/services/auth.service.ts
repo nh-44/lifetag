@@ -1,8 +1,9 @@
+import { prisma } from '../config/database';
 import { userRepository } from '../repositories/userRepository';
 import { doctorRepository } from '../repositories/doctorRepository';
 import { firstResponderRepository } from '../repositories/firstResponderRepository';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
-import { generateToken } from '../utils/jwt.utils';
+import { generateToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.utils';
 import { LoginRequestBody, SignupRequestBody } from '../types/auth.types';
 import { Role } from '../constants/roles';
 
@@ -49,10 +50,24 @@ export const authService = {
     }
 
     const token = generateToken({ userId, role });
+    const refreshToken = generateRefreshToken({ userId, role });
+    
+    // Save refresh token to DB
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId,
+        expiresAt,
+      },
+    });
+
     const userWithoutPassword = stripPassword(userRecord);
 
     return {
       token,
+      refreshToken,
       user: {
         ...userWithoutPassword,
         role,
@@ -115,10 +130,24 @@ export const authService = {
     }
 
     const token = generateToken({ userId, role: role as Role });
+    const refreshToken = generateRefreshToken({ userId, role: role as Role });
+
+    // Save refresh token to DB
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId,
+        expiresAt,
+      },
+    });
+
     const userWithoutPassword = stripPassword(newUser);
 
     return {
       token,
+      refreshToken,
       user: {
         ...userWithoutPassword,
         role,
@@ -139,5 +168,41 @@ export const authService = {
     }
 
     return { available: !exists };
+  },
+
+  refresh: async (refreshToken: string) => {
+    if (!refreshToken) throw { statusCode: 400, message: 'Refresh token is required' };
+
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch (e) {
+      throw { statusCode: 401, message: 'Invalid or expired refresh token' };
+    }
+
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+
+    if (!storedToken) {
+      throw { statusCode: 401, message: 'Refresh token has been revoked' };
+    }
+
+    if (storedToken.expiresAt < new Date()) {
+      await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+      throw { statusCode: 401, message: 'Refresh token has expired' };
+    }
+
+    const token = generateToken({ userId: payload.userId, role: payload.role });
+    return { token };
+  },
+
+  logout: async (refreshToken: string) => {
+    if (refreshToken) {
+      await prisma.refreshToken.deleteMany({
+        where: { token: refreshToken },
+      });
+    }
+    return { success: true };
   }
 };

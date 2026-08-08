@@ -3,7 +3,9 @@ import { patientController } from '../../controllers/patient.controller';
 import { authMiddleware } from '../../middlewares/auth.middleware';
 import { requireRole } from '../../middlewares/rbac.middleware';
 import { requireMedicalConsent } from '../../middlewares/consent.middleware';
+import { validate } from '../../middlewares/validate.middleware';
 import { Role } from '../../constants/roles';
+import { FullUserProfileSchema } from '../../types/patient.types';
 
 const router = Router();
 
@@ -18,7 +20,7 @@ router.get('/medical/:accountId', requireRole(Role.DOCTOR), requireMedicalConsen
 
 // Patient self-management - available only to Users
 router.get('/me', requireRole(Role.USER), patientController.getMyProfile);
-router.put('/me', requireRole(Role.USER), patientController.updateProfile);
+router.put('/me', requireRole(Role.USER), validate(FullUserProfileSchema), patientController.updateProfile);
 router.delete('/me', requireRole(Role.USER), patientController.deleteAccount);
 
 // Explicit route for user fetching their own profile by ID (matches frontend service call)

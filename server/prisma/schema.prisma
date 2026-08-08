@@ -104,3 +104,13 @@ model ScanAuditLog {
   timestamp      DateTime @default(now())
   deviceMeta     String?
 }
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+}

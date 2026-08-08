@@ -30,6 +30,46 @@ export interface FullUserProfileDTO extends EmergencyInfoDTO {
   doctorOnlyInfo: DoctorOnlyInfoDTO;
 }
 
+import { z } from 'zod';
+
+export const EmergencyInfoSchema = z.object({
+  userId: z.string().optional(),
+  accountId: z.string().optional(),
+  name: z.string().optional(),
+  age: z.number().int().min(0).max(150),
+  bloodGroup: z.string().min(1),
+  allergies: z.array(z.string()),
+  emergencyContacts: z.array(z.object({
+    userId: z.string(),
+    name: z.string()
+  })),
+  dnrStatus: z.boolean(),
+  primaryPhysician: z.object({
+    userId: z.string(),
+    name: z.string()
+  }).optional(),
+  insuranceId: z.string(),
+  authoritySignature: z.string().optional()
+});
+
+export const DoctorOnlyInfoSchema = z.object({
+  drinkingHabits: z.string().optional(),
+  smokingHabits: z.string().optional(),
+  medications: z.array(z.string()),
+  illnesses: z.array(z.string()),
+  surgeries: z.array(z.string()),
+  lastCheckup: z.object({
+    weight: z.number(),
+    bmi: z.number(),
+    sugar: z.number(),
+    bp: z.string()
+  }).optional()
+});
+
+export const FullUserProfileSchema = EmergencyInfoSchema.extend({
+  doctorOnlyInfo: DoctorOnlyInfoSchema.optional()
+});
+
 export interface DoctorProfileDTO {
   userId: string;
   name: string;

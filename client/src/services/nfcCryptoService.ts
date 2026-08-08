@@ -15,49 +15,95 @@ export class NfcCryptoService {
     y: "KHaR_N-H8tgqAy4zKrzs64HN1PBy-1mEQHDL5SzLXOU",
   };
 
-  // Mock Authority private key JWK removed; backend provides real signature
+  private static DB_NAME = "LifeTagCryptoDB";
+  private static STORE_NAME = "keys";
+  private static KEY_ID = "ecdsa_keypair";
+
+  private static async getDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.DB_NAME, 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+          db.createObjectStore(this.STORE_NAME);
+        }
+      };
+    });
+  }
+
+  private static async getStoredKeyPair(): Promise<CryptoKeyPair | null> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(this.STORE_NAME, "readonly");
+      const store = transaction.objectStore(this.STORE_NAME);
+      const request = store.get(this.KEY_ID);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
+  private static async storeKeyPair(keyPair: CryptoKeyPair): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(this.STORE_NAME, "readwrite");
+      const store = transaction.objectStore(this.STORE_NAME);
+      const request = store.put(keyPair, this.KEY_ID);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
 
   /**
-   * Generates a persistent ECDSA P-256 key pair in LocalStorage (representing the patient's local wallet)
+   * Generates a persistent ECDSA P-256 key pair in IndexedDB (representing the patient's local wallet)
    */
   static async getOrCreateKeyPair(): Promise<CryptoKeyPair> {
     try {
-      const stored = localStorage.getItem(this.KEY_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const privateKey = await window.crypto.subtle.importKey(
-          "jwk",
-          parsed.privateKey,
-          { name: "ECDSA", namedCurve: "P-256" },
-          true,
-          ["sign"]
-        );
-        const publicKey = await window.crypto.subtle.importKey(
-          "jwk",
-          parsed.publicKey,
-          { name: "ECDSA", namedCurve: "P-256" },
-          true,
-          ["verify"]
-        );
-        return { privateKey, publicKey };
+      // Migrate from localStorage if it exists (one-time migration)
+      const legacyStored = localStorage.getItem(this.KEY_STORAGE_KEY);
+      if (legacyStored) {
+        try {
+          const parsed = JSON.parse(legacyStored);
+          const privateKey = await window.crypto.subtle.importKey(
+            "jwk",
+            parsed.privateKey,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false, // Make it non-extractable in memory now
+            ["sign"]
+          );
+          const publicKey = await window.crypto.subtle.importKey(
+            "jwk",
+            parsed.publicKey,
+            { name: "ECDSA", namedCurve: "P-256" },
+            true, // Public key is always extractable
+            ["verify"]
+          );
+          const legacyKeyPair = { privateKey, publicKey };
+          await this.storeKeyPair(legacyKeyPair);
+          localStorage.removeItem(this.KEY_STORAGE_KEY);
+          return legacyKeyPair;
+        } catch (e) {
+          console.warn("Legacy key migration failed, starting fresh.");
+          localStorage.removeItem(this.KEY_STORAGE_KEY);
+        }
+      }
+
+      const storedKeyPair = await this.getStoredKeyPair();
+      if (storedKeyPair) {
+        return storedKeyPair;
       }
     } catch (e) {
-      console.warn("Failed to load stored keypair, generating new one", e);
+      console.warn("Failed to load stored keypair from IndexedDB, generating new one", e);
     }
 
     const keyPair = await window.crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
-      true,
+      false, // extractable: false prevents XSS from stealing the private key
       ["sign", "verify"]
     );
 
-    const privateKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.privateKey);
-    const publicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
-
-    localStorage.setItem(
-      this.KEY_STORAGE_KEY,
-      JSON.stringify({ privateKey: privateKeyJwk, publicKey: publicKeyJwk })
-    );
+    await this.storeKeyPair(keyPair);
 
     return keyPair;
   }

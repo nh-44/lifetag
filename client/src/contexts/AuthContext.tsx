@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { toast } from 'sonner';
 import { authenticateUser, registerUser, checkUserIdAvailability } from '@/services/userService';
+import { tokenStorage } from '@/utils/tokenStorage';
 
 export type UserRole = 'USER' | 'DOCTOR' | 'FIRST_RESPONDER';
 
@@ -68,7 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userWithToken = { ...response.user, token: response.token };
         setCurrentUser(userWithToken);
         localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
-        localStorage.setItem('lifetag_token', response.token);
+        tokenStorage.setToken(response.token);
+        if (response.refreshToken) {
+          tokenStorage.setRefreshToken(response.refreshToken);
+        }
         toast.success('Logged in successfully');
         return true;
       }
@@ -102,7 +106,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userWithToken = { ...response.user, token: response.token };
         setCurrentUser(userWithToken);
         localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
-        localStorage.setItem('lifetag_token', response.token);
+        tokenStorage.setToken(response.token);
+        if (response.refreshToken) {
+          tokenStorage.setRefreshToken(response.refreshToken);
+        }
         toast.success('Account created successfully');
         return true;
       }
@@ -118,10 +125,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const refreshToken = tokenStorage.getRefreshToken();
+    if (refreshToken) {
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1'}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken })
+        });
+      } catch (e) {
+        console.error('Failed to invalidate refresh token on backend', e);
+      }
+    }
+    
     setCurrentUser(null);
     localStorage.removeItem('lifetagUser');
-    localStorage.removeItem('lifetag_token');
+    tokenStorage.clearTokens();
     toast.success('Logged out successfully');
   };
 

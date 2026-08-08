@@ -84,15 +84,13 @@ export class CryptoUtils {
    * Loads the private key from the environment variable AUTHORITY_PRIVATE_KEY, falling back to development JWK.
    */
   static signWithAuthorityKey(patientPublicKeyString: string): string {
-    const keyData = process.env.AUTHORITY_PRIVATE_KEY 
-      ? JSON.parse(process.env.AUTHORITY_PRIVATE_KEY)
-      : {
-          kty: "EC",
-          crv: "P-256",
-          x: "Sy52YAL3SADCzj6OTAiLmHGTiJR3-AjJimHizE3n3Eg",
-          y: "KHaR_N-H8tgqAy4zKrzs64HN1PBy-1mEQHDL5SzLXOU",
-          d: "JEwxtqk-7PkCzRhgSL1BU21QeQt1lT_AWjTbFgPA_Tc",
-        };
+    if (!process.env.AUTHORITY_PRIVATE_KEY) {
+      throw new Error(
+        'AUTHORITY_PRIVATE_KEY is not set. Generate an ECDSA P-256 key pair and add it to your .env file. See .env.example for instructions.'
+      );
+    }
+
+    const keyData = JSON.parse(process.env.AUTHORITY_PRIVATE_KEY);
       
     try {
       const privateKey = crypto.createPrivateKey({
