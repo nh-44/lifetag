@@ -11,8 +11,8 @@ export class NfcCryptoService {
   private static AUTHORITY_PUBLIC_KEY_JWK = {
     kty: "EC",
     crv: "P-256",
-    x: "Sy52YAL3SADCzj6OTAiLmHGTiJR3-AjJimHizE3n3Eg",
-    y: "KHaR_N-H8tgqAy4zKrzs64HN1PBy-1mEQHDL5SzLXOU",
+    x: "Uc4y1v9im9DwBm1ZBB2sRvV16C1ydaMibBkUJpV0Bnk",
+    y: "TqNtq2pxdFWi_5U1sWLcanbR_1zkM3sFojb0_UYn4Us",
   };
 
   private static DB_NAME = "LifeTagCryptoDB";
