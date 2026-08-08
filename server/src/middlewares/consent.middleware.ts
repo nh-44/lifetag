@@ -6,7 +6,7 @@ import { ErrorCodes } from '../constants/errorCodes';
 
 export const requireMedicalConsent = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
     const doctorId = req.user!.userId;
 
     const patient = await userRepository.findByAccountId(accountId);

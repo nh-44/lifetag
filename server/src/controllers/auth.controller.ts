@@ -23,7 +23,7 @@ export const authController = {
 
   checkAvailability: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId } = req.params;
+      const userId = req.params.userId as string;
       const result = await authService.checkAvailability(userId);
       sendSuccess(res, result);
     } catch (error) {

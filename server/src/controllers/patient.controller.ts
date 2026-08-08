@@ -5,7 +5,7 @@ import { sendSuccess } from '../utils/response.utils';
 export const patientController = {
   getEmergencyInfo: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { accountId } = req.params;
+      const accountId = req.params.accountId as string;
       const result = await patientService.getEmergencyInfo(accountId);
       sendSuccess(res, result);
     } catch (error) {
@@ -15,7 +15,7 @@ export const patientController = {
 
   getFullMedicalInfo: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { accountId } = req.params;
+      const accountId = req.params.accountId as string;
       const result = await patientService.getFullProfile(accountId);
       sendSuccess(res, result);
     } catch (error) {
