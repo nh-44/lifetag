@@ -44,6 +44,15 @@ function runSecurityTests() {
   };
 
   try {
+    // Set Authority keys in environment for the test
+    const authorityKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const authorityPrivateKeyJwk = authorityKeys.privateKey.export({ format: 'jwk' });
+    const authorityPublicKeyJwk = authorityKeys.publicKey.export({ format: 'jwk' });
+    process.env.AUTHORITY_PRIVATE_KEY = JSON.stringify(authorityPrivateKeyJwk);
+    
+    // Override the static public key in the service for the test
+    (NfcService as any).AUTHORITY_PUBLIC_KEY_JWK = authorityPublicKeyJwk;
+
     // Test 1: Generate valid keys and signature
     const patientKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
     const patientPublicKeyJwk = patientKeys.publicKey.export({ format: 'jwk' });
