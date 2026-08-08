@@ -59,3 +59,8 @@ jobs:
       run: |
         cd server
         npm run build
+
+    - name: Run Server Security Tests
+      run: |
+        cd server
+        npm run test:security
