@@ -17,6 +17,9 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 - 🔐 **Role-Based Views & Security**:
   - **Public / First Responder**: Instant view of emergency contacts, blood type, allergies, and organ donor status.
   - **Verified Doctor Portal**: Deep medical access including medical history, surgical records, and vitals checkups.
+- 🔑 **Zero-Trust ECDSA Cryptography**: Every NFC tag payload is signed with a patient-specific ECDSA P-256 private key stored in non-extractable IndexedDB. A two-tier authority certification system prevents tag spoofing.
+- 🔄 **JWT Refresh & Revocation**: Short-lived 15-minute Access Tokens + 7-day Refresh Tokens with server-side revocation on logout.
+- 🛡️ **End-to-End Input Validation**: All API endpoints protected by Zod schema validation, rate limiting, and role-based + medical consent access gates.
 - 📱 **Offline-First Resilience**: Designed to operate without network connectivity during disaster recovery or remote accidents.
 
 ---
@@ -47,6 +50,8 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 │   │                   PostgreSQL Database (via Prisma ORM)                         │   │
 │   └────────────────────────────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────────────────────┘
+
+> 📘 **See the full [Security Architecture](docs/security_architecture.md)** for details on the dual-token JWT flow and cryptographic trust chain.
 ```
 
 - **Frontend Core**: React 18, Vite 5, TypeScript 5, React Router DOM v6
@@ -62,6 +67,7 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 ### Prerequisites
 - Node.js (v18.x or higher)
 - npm (v9.x or higher)
+- PostgreSQL (Native installation OR Docker Desktop)
 - Chrome for Android / Web NFC capable mobile browser for hardware testing
 
 ### Installation & Run
@@ -77,9 +83,11 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
    cd server
    npm install
    # Configure your PostgreSQL database URL in the .env file:
-   # DATABASE_URL="postgresql://username:password@host:port/database_name"
+   # Option A (Native Postgres): DATABASE_URL="postgresql://username:password@localhost:5432/database_name"
+   # Option B (Docker Postgres): DATABASE_URL="postgresql://username:password@localhost:5433/database_name"
    npm run prisma:generate
-   npm run prisma:migrate
+   npx prisma db push
+   npm run db:seed
    npm run dev
    ```
 
@@ -105,18 +113,14 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 
 The consolidated project is scheduled for next-generation architectural enhancements:
 
-### 1. Zero-Trust Asymmetric On-Tag Cryptography
-- **ECDSA P-256 Digital Signatures**: Append tamper-evident cryptographic signatures to NDEF payloads, allowing offline verification of tag authenticity without database calls.
-- **AES-GCM 256 Payload Encryption**: Encrypt sensitive medical histories directly onto NFC payload blocks accessible only via authorized key pairs.
+### 1. AES-GCM 256 Payload Encryption
+- Encrypt sensitive medical histories directly onto NFC payload blocks accessible only via authorized key pairs.
 
-### 2. HL7 FHIR Standard Compliance
-- Structure patient triage records using standardized **HL7 FHIR Patient** and **AllergyIntolerance** JSON schemas for universal hospital EMR interoperability.
-
-### 3. WebAuthn & Passkey Hardware Authentication
+### 2. WebAuthn & Passkey Hardware Authentication
 - Replace password logins for medical practitioners with biometric WebAuthn / FIDO2 authentication tied to verified doctor credentials.
 
-### 4. PWA Service Worker & Offline Sync
-- Package LifeTag as an installable Progressive Web App (PWA) using IndexedDB for local offline scan history synchronization.
+### 3. PWA Service Worker & Offline Sync
+- Package LifeTag as an installable Progressive Web App (PWA) using local offline scan history synchronization.
 
 ---
 
