@@ -21,7 +21,10 @@ export class NfcCryptoService {
 
   private static async getDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.DB_NAME, 1);
+      if (typeof window === "undefined" || !window.indexedDB) {
+        return reject(new Error("indexedDB is not available"));
+      }
+      const request = window.indexedDB.open(this.DB_NAME, 1);
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
       request.onupgradeneeded = (event) => {
@@ -34,25 +37,33 @@ export class NfcCryptoService {
   }
 
   private static async getStoredKeyPair(): Promise<CryptoKeyPair | null> {
-    const db = await this.getDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(this.STORE_NAME, "readonly");
-      const store = transaction.objectStore(this.STORE_NAME);
-      const request = store.get(this.KEY_ID);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result || null);
-    });
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.STORE_NAME, "readonly");
+        const store = transaction.objectStore(this.STORE_NAME);
+        const request = store.get(this.KEY_ID);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result || null);
+      });
+    } catch (e) {
+      return null;
+    }
   }
 
   private static async storeKeyPair(keyPair: CryptoKeyPair): Promise<void> {
-    const db = await this.getDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(this.STORE_NAME, "readwrite");
-      const store = transaction.objectStore(this.STORE_NAME);
-      const request = store.put(keyPair, this.KEY_ID);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.STORE_NAME, "readwrite");
+        const store = transaction.objectStore(this.STORE_NAME);
+        const request = store.put(keyPair, this.KEY_ID);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve();
+      });
+    } catch (e) {
+      console.warn("Skipping key storage due to DB error:", e);
+    }
   }
 
   /**
@@ -61,31 +72,33 @@ export class NfcCryptoService {
   static async getOrCreateKeyPair(): Promise<CryptoKeyPair> {
     try {
       // Migrate from localStorage if it exists (one-time migration)
-      const legacyStored = localStorage.getItem(this.KEY_STORAGE_KEY);
-      if (legacyStored) {
-        try {
-          const parsed = JSON.parse(legacyStored);
-          const privateKey = await window.crypto.subtle.importKey(
-            "jwk",
-            parsed.privateKey,
-            { name: "ECDSA", namedCurve: "P-256" },
-            false, // Make it non-extractable in memory now
-            ["sign"]
-          );
-          const publicKey = await window.crypto.subtle.importKey(
-            "jwk",
-            parsed.publicKey,
-            { name: "ECDSA", namedCurve: "P-256" },
-            true, // Public key is always extractable
-            ["verify"]
-          );
-          const legacyKeyPair = { privateKey, publicKey };
-          await this.storeKeyPair(legacyKeyPair);
-          localStorage.removeItem(this.KEY_STORAGE_KEY);
-          return legacyKeyPair;
-        } catch (e) {
-          console.warn("Legacy key migration failed, starting fresh.");
-          localStorage.removeItem(this.KEY_STORAGE_KEY);
+      if (typeof window !== "undefined" && window.localStorage) {
+        const legacyStored = localStorage.getItem(this.KEY_STORAGE_KEY);
+        if (legacyStored) {
+          try {
+            const parsed = JSON.parse(legacyStored);
+            const privateKey = await window.crypto.subtle.importKey(
+              "jwk",
+              parsed.privateKey,
+              { name: "ECDSA", namedCurve: "P-256" },
+              false, // Make it non-extractable in memory now
+              ["sign"]
+            );
+            const publicKey = await window.crypto.subtle.importKey(
+              "jwk",
+              parsed.publicKey,
+              { name: "ECDSA", namedCurve: "P-256" },
+              true, // Public key is always extractable
+              ["verify"]
+            );
+            const legacyKeyPair = { privateKey, publicKey };
+            await this.storeKeyPair(legacyKeyPair);
+            localStorage.removeItem(this.KEY_STORAGE_KEY);
+            return legacyKeyPair;
+          } catch (e) {
+            console.warn("Legacy key migration failed, starting fresh.");
+            localStorage.removeItem(this.KEY_STORAGE_KEY);
+          }
         }
       }
 
@@ -242,7 +255,7 @@ export class NfcCryptoService {
    * Decompresses Gzip payload back to JSON payload
    */
   static async decompressPayload(compressed: Uint8Array): Promise<NfcTagPayload> {
-    const stream = new Response(compressed).body?.pipeThrough(new DecompressionStream("gzip"));
+    const stream = new Response(compressed as any).body?.pipeThrough(new DecompressionStream("gzip"));
     if (!stream) throw new Error("DecompressionStream not supported");
     const decompressedBuffer = await new Response(stream).arrayBuffer();
     const jsonString = new TextDecoder().decode(decompressedBuffer);
