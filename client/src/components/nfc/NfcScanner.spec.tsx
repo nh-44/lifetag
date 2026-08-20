@@ -182,7 +182,7 @@ describe('NfcScanner', () => {
     });
 
     await waitFor(() => {
-      expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("No JSON found"));
+      expect(mockOnScanError).toHaveBeenCalledWith(expect.stringContaining("No readable record found"));
     });
   });
 

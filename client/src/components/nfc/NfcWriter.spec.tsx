@@ -2,11 +2,12 @@ import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import NfcWriter from './NfcWriter';
 import { NfcCryptoService } from '@/services/nfcCryptoService';
-import { fetchWithAuth } from '@/services/api';
+import { fetchWithAuth, logBenchmarkTelemetry } from '@/services/api';
 import { toast } from 'sonner';
 
 vi.mock('@/services/api', () => ({
-  fetchWithAuth: vi.fn()
+  fetchWithAuth: vi.fn(),
+  logBenchmarkTelemetry: vi.fn().mockResolvedValue(undefined)
 }));
 
 vi.mock('sonner', () => ({
@@ -21,8 +22,18 @@ describe('NfcWriter', () => {
   const mockOnWriteComplete = vi.fn();
   const mockOnWriteError = vi.fn();
 
+  const fetchProfile = async (accountId: string) => {
+    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: accountId } });
+    fireEvent.click(screen.getByRole('button', { name: /Fetch Profile/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/FHIR Patient ID/i)).toHaveValue(accountId);
+      expect(screen.getByLabelText(/Full Name/i)).toHaveValue("Jane Doe");
+    });
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(logBenchmarkTelemetry).mockResolvedValue(undefined);
     
     // Default success mock for fetchWithAuth
     vi.mocked(fetchWithAuth).mockResolvedValue({
@@ -61,8 +72,7 @@ describe('NfcWriter', () => {
       expect(screen.getByText(/NFC is not supported/i)).toBeInTheDocument();
     });
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '12345' } });
+    await fetchProfile('12345');
     
     const writeBtn = screen.getByRole('button', { name: /^Write/i });
     fireEvent.click(writeBtn);
@@ -80,6 +90,18 @@ describe('NfcWriter', () => {
     }
     vi.stubGlobal('NDEFReader', MockNDEFReader);
 
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
+      success: true,
+      data: {
+        accountId: '54321',
+        name: "Jane Doe",
+        bloodGroup: "O-",
+        allergies: ["None"],
+        emergencyContacts: [],
+        dnrStatus: false,
+      }
+    });
+
     render(
       <NfcWriter 
         onWriteComplete={mockOnWriteComplete} 
@@ -87,8 +109,7 @@ describe('NfcWriter', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '54321' } });
+    await fetchProfile('54321');
     
     const writeBtn = screen.getByRole('button', { name: /^Write/i });
     fireEvent.click(writeBtn);
@@ -104,8 +125,7 @@ describe('NfcWriter', () => {
     class MockNDEFReader { write = mockWrite; }
     vi.stubGlobal('NDEFReader', MockNDEFReader);
 
-    // Mock calculateByteSize to return rawBytes > 504
-    vi.spyOn(NfcCryptoService, 'calculateByteSize').mockResolvedValue({ rawBytes: 600, compressedBytes: 300, fitsNtag215: true });
+    vi.spyOn(NfcCryptoService, 'compressPayload').mockResolvedValue(new Uint8Array(600));
 
     render(
       <NfcWriter 
@@ -114,14 +134,24 @@ describe('NfcWriter', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '99999' } });
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
+      success: true,
+      data: {
+        accountId: '99999',
+        name: "Jane Doe",
+        bloodGroup: "O-",
+        allergies: ["None"],
+        emergencyContacts: [],
+        dnrStatus: false,
+      }
+    });
+    await fetchProfile('99999');
     
     const writeBtn = screen.getByRole('button', { name: /^Write/i });
     fireEvent.click(writeBtn);
 
     await waitFor(() => {
-      expect(mockOnWriteError).toHaveBeenCalledWith(expect.stringContaining('Payload too large'));
+      expect(mockOnWriteError).toHaveBeenCalledWith(expect.stringContaining('exceeds standard NTAG215 budget'));
       expect(mockWrite).not.toHaveBeenCalled();
     });
   });
@@ -142,10 +172,10 @@ describe('NfcWriter', () => {
     
     render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
     fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fetch Profile/i }));
 
     await waitFor(() => {
-      expect(mockOnWriteError).toHaveBeenCalledWith('Patient not found');
+      expect(toast.error).toHaveBeenCalledWith('Patient not found');
     });
   });
 
@@ -155,7 +185,7 @@ describe('NfcWriter', () => {
     vi.stubGlobal('NDEFReader', MockNDEFReader);
 
     render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
-    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
+    await fetchProfile('12345');
     fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
 
     await waitFor(() => {
