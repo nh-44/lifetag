@@ -189,15 +189,13 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto shadow-md">
-      <CardHeader className="bg-slate-50 border-b">
-        <CardTitle className="text-xl font-bold flex items-center gap-2">
-          <Edit className="h-5 w-5 text-lifetag-primary" />
-          Emergency Triage Card Writer
-        </CardTitle>
-      </CardHeader>
+    <div className="w-full max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-2 pb-3 border-b">
+        <Edit className="h-5 w-5 text-lifetag-primary" />
+        <h2 className="text-xl font-bold">Emergency Triage Card Writer</h2>
+      </div>
       
-      <CardContent className="pt-6 space-y-6">
+      <div className="space-y-6">
         {/* Fetch Section */}
         <div className="bg-slate-100 p-4 rounded-lg flex flex-col md:flex-row gap-3 items-end">
           <div className="flex-1 space-y-2">
@@ -377,8 +375,8 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
             </p>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 

@@ -82,7 +82,7 @@ const AdminPanel = ({ onWriteComplete, onAuthChange }: AdminPanelProps) => {
           setIsOpen(open);
         }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isAuthenticated ? "Admin Panel" : "Admin Login"}</DialogTitle>
           </DialogHeader>
