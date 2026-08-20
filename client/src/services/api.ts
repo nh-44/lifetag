@@ -68,3 +68,21 @@ export const fetchWithoutAuth = async (endpoint: string, options: RequestInit = 
 
   return response.json();
 };
+
+export const logBenchmarkTelemetry = async (data: {
+  operation: "READ" | "WRITE";
+  payloadSizeRaw: number;
+  payloadSizeCompressed: number;
+  timeElapsedMs: number;
+  deviceMeta?: string;
+}) => {
+  try {
+    return await fetchWithoutAuth('/benchmarks/log', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  } catch (error) {
+    console.error('Failed to log benchmark telemetry:', error);
+    return { success: false, error };
+  }
+};

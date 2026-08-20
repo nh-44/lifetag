@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Scan } from "lucide-react";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
 import { NfcTagPayload } from "@/types";
+import { logBenchmarkTelemetry } from "@/services/api";
 
 interface NfcScannerProps {
   isScanning: boolean;
@@ -38,6 +39,7 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
         
         ndef.addEventListener("reading", async (event: any) => {
           console.log("NFC tag detected!");
+          const startTimer = performance.now();
           
           if (!event.message || !event.message.records) {
             onScanError("Tag is empty or unreadable.");
@@ -46,6 +48,8 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
 
           let payload: NfcTagPayload | null = null;
           let parseErrorDetail = "";
+          let rawSize = 0;
+          let compressedSize = 0;
 
           for (const record of event.message.records) {
             if (record.recordType === "mime" && record.mediaType === "application/octet-stream") {
@@ -53,7 +57,9 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                 // Convert DataView to Uint8Array safely
                 const rawData = record.data;
                 const compressedBytes = new Uint8Array(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+                compressedSize = compressedBytes.length;
                 payload = await NfcCryptoService.decompressPayload(compressedBytes);
+                rawSize = JSON.stringify(payload).length;
                 console.log("Decompressed binary tag payload successfully:", payload);
                 break;
               } catch (e: any) {
@@ -68,6 +74,8 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                 if (jsonStartIndex !== -1) {
                   const cleanJson = textContent.substring(jsonStartIndex);
                   payload = JSON.parse(cleanJson);
+                  rawSize = cleanJson.length;
+                  compressedSize = rawSize; // No compression on legacy text
                   console.log("Parsed legacy text JSON payload successfully:", payload);
                   break;
                 }
@@ -99,8 +107,20 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
               throw new Error(verifyError || "Patient signature invalid (tampered triage data)");
             }
 
+            const endTimer = performance.now();
+            const duration = endTimer - startTimer;
+
+            // Log read telemetry speed
+            await logBenchmarkTelemetry({
+              operation: "READ",
+              payloadSizeRaw: rawSize,
+              payloadSizeCompressed: compressedSize,
+              timeElapsedMs: duration,
+              deviceMeta: navigator.userAgent,
+            });
+
             // Success
-            console.log("Successfully parsed and verified payload:", payload);
+            console.log(`Successfully parsed, verified, and logged tag payload in ${duration.toFixed(2)}ms:`, payload);
             onScanComplete(payload.fhirPatientId, payload);
             
             if (abortControllerRef.current) {

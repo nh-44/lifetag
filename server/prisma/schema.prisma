@@ -114,3 +114,13 @@ model RefreshToken {
   
   @@index([userId])
 }
+
+model BenchmarkLog {
+  id                    String   @id @default(uuid())
+  operation             String   // "READ" or "WRITE"
+  payloadSizeRaw        Int      // raw JSON size in bytes
+  payloadSizeCompressed Int      // compressed Gzip size in bytes
+  timeElapsedMs         Float    // time taken in milliseconds
+  deviceMeta            String?  // device info/browser user agent
+  timestamp             DateTime @default(now())
+}

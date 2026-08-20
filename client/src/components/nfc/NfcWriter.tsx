@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
-import { fetchWithAuth } from "@/services/api";
+import { fetchWithAuth, logBenchmarkTelemetry } from "@/services/api";
 
 interface NfcWriterProps {
   onWriteComplete: (accountId: string) => void;
@@ -127,6 +127,8 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
         const ndef = new NDEFReader();
         toast.info(`Hold the NFC tag near your device... (${compressedBytes.length} bytes)`);
 
+        const startTimer = performance.now();
+
         // 3. Write raw Gzip compressed bytes as an octet-stream MIME record
         await ndef.write({
           records: [
@@ -138,13 +140,36 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           ]
         });
 
-        console.log("Successfully wrote compressed payload to tag:", payload);
-        toast.success("Compressed NFC Tag written successfully!");
+        const endTimer = performance.now();
+        const duration = endTimer - startTimer;
+
+        // Log write speed telemetry
+        await logBenchmarkTelemetry({
+          operation: "WRITE",
+          payloadSizeRaw: JSON.stringify(payload).length,
+          payloadSizeCompressed: compressedBytes.length,
+          timeElapsedMs: duration,
+          deviceMeta: navigator.userAgent,
+        });
+
+        console.log(`Successfully wrote compressed payload to tag in ${duration.toFixed(2)}ms:`, payload);
+        toast.success(`Compressed NFC Tag written successfully in ${duration.toFixed(0)}ms!`);
         onWriteComplete(fhirPatientId);
       } else {
         // Simulate writing for unsupported browsers
         toast.info(`Simulating NFC write of compressed payload... (${compressedBytes.length} bytes)`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const startTimer = performance.now();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const duration = performance.now() - startTimer;
+
+        await logBenchmarkTelemetry({
+          operation: "WRITE",
+          payloadSizeRaw: JSON.stringify(payload).length,
+          payloadSizeCompressed: compressedBytes.length,
+          timeElapsedMs: duration,
+          deviceMeta: `${navigator.userAgent} [SIMULATED]`,
+        });
+
         toast.success("Simulation: NFC Tag written successfully!");
         onWriteComplete(fhirPatientId);
       }
