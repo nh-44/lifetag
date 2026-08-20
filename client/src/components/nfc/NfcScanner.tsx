@@ -44,36 +44,46 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
             return;
           }
 
-          let textContent = "";
+          let payload: NfcTagPayload | null = null;
+          let parseErrorDetail = "";
+
           for (const record of event.message.records) {
-            if (record.recordType === "text") {
+            if (record.recordType === "mime" && record.mediaType === "application/octet-stream") {
+              try {
+                // Convert DataView to Uint8Array safely
+                const rawData = record.data;
+                const compressedBytes = new Uint8Array(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+                payload = await NfcCryptoService.decompressPayload(compressedBytes);
+                console.log("Decompressed binary tag payload successfully:", payload);
+                break;
+              } catch (e: any) {
+                console.error("Failed to decompress binary record:", e);
+                parseErrorDetail = e.message || "Decompression failed";
+              }
+            } else if (record.recordType === "text") {
               const textDecoder = new TextDecoder(record.encoding || "utf-8");
               try {
-                // Some browsers might pass raw bytes including the language code prefix.
-                // We'll decode it and cleanly find the JSON substring later.
-                textContent = textDecoder.decode(record.data);
-              } catch (e) {
-                console.error("Error decoding text record", e);
+                const textContent = textDecoder.decode(record.data);
+                const jsonStartIndex = textContent.indexOf('{');
+                if (jsonStartIndex !== -1) {
+                  const cleanJson = textContent.substring(jsonStartIndex);
+                  payload = JSON.parse(cleanJson);
+                  console.log("Parsed legacy text JSON payload successfully:", payload);
+                  break;
+                }
+              } catch (e: any) {
+                console.error("Error decoding text record:", e);
+                parseErrorDetail = e.message || "JSON parse failed";
               }
-              break;
             }
           }
 
-          if (!textContent) {
-            onScanError("No text record found on the NFC tag.");
+          if (!payload) {
+            onScanError(`No readable record found on the NFC tag. ${parseErrorDetail}`);
             return;
           }
 
           try {
-            // Find JSON bracket to skip any native NDEF language prefixes
-            const jsonStartIndex = textContent.indexOf('{');
-            if (jsonStartIndex === -1) {
-              throw new Error("Invalid payload format. No JSON found.");
-            }
-            
-            const cleanJson = textContent.substring(jsonStartIndex);
-            const payload = JSON.parse(cleanJson);
-
             // Validate
             if (!payload.fhirPatientId) {
               throw new Error("Missing patient ID in tag payload.");

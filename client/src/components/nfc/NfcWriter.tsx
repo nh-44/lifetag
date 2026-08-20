@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
-import { Edit } from "lucide-react";
+import { Edit, Download, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
 import { fetchWithAuth } from "@/services/api";
@@ -12,100 +17,145 @@ interface NfcWriterProps {
 }
 
 const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
-  const [accountId, setAccountId] = useState("");
-  const [isWriting, setIsWriting] = useState(false);
   const [isNfcSupported, setIsNfcSupported] = useState<boolean | null>(null);
+  const [isWriting, setIsWriting] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchAccountId, setFetchAccountId] = useState("");
+
+  // Form Fields
+  const [fhirPatientId, setFhirPatientId] = useState("");
+  const [name, setName] = useState("");
+  const [bloodGroup, setBloodGroup] = useState("O-Negative");
+  const [allergiesText, setAllergiesText] = useState("");
+  const [dnrStatus, setDnrStatus] = useState(false);
+  const [emergencyContacts, setEmergencyContacts] = useState<Array<{ userId: string; name: string }>>([
+    { userId: "", name: "" }
+  ]);
+  const [authoritySignature, setAuthoritySignature] = useState("");
 
   // Check if NFC is supported
   useEffect(() => {
-    // @ts-ignore - NDEFReader is not in TypeScript's lib.dom yet
-    const isSupported = typeof NDEFReader !== 'undefined';
-    setIsNfcSupported(isSupported);
+    // @ts-ignore
+    setIsNfcSupported(typeof NDEFReader !== 'undefined');
   }, []);
 
-  const validateAccountId = (id: string) => {
-    // Must be 5 digits
-    return /^\d{5}$/.test(id);
-  };
-
-  const handleWrite = async () => {
-    if (!validateAccountId(accountId)) {
+  const handleFetchProfile = async () => {
+    if (!/^\d{5}$/.test(fetchAccountId)) {
       toast.error("Account ID must be exactly 5 digits");
       return;
     }
 
-    setIsWriting(true);
-
+    setIsFetching(true);
     try {
-      // 1. Fetch real patient triage profile
-      const response = await fetchWithAuth(`/patients/triage/${accountId}`);
+      const response = await fetchWithAuth(`/patients/triage/${fetchAccountId}`);
       if (!response.success || !response.data) {
         throw new Error(response.error?.message || "Failed to fetch patient data");
       }
-      
-      const patientData = response.data;
 
-      // 2. Generate the payload using the crypto service
+      const patientData = response.data;
+      setFhirPatientId(patientData.accountId || fetchAccountId);
+      setName(patientData.name || "");
+      setBloodGroup(patientData.bloodGroup || "O-Negative");
+      setAllergiesText(patientData.allergies?.join(", ") || "");
+      setDnrStatus(patientData.dnrStatus || false);
+      setEmergencyContacts(
+        patientData.emergencyContacts?.length > 0
+          ? patientData.emergencyContacts
+          : [{ userId: "", name: "" }]
+      );
+      setAuthoritySignature(patientData.authoritySignature || "");
+      toast.success("Profile fetched and loaded successfully!");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load patient data");
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const handleAddContact = () => {
+    setEmergencyContacts([...emergencyContacts, { userId: "", name: "" }]);
+  };
+
+  const handleRemoveContact = (index: number) => {
+    const updated = emergencyContacts.filter((_, idx) => idx !== index);
+    setEmergencyContacts(updated.length > 0 ? updated : [{ userId: "", name: "" }]);
+  };
+
+  const handleContactChange = (index: number, key: "userId" | "name", value: string) => {
+    const updated = [...emergencyContacts];
+    updated[index][key] = value;
+    setEmergencyContacts(updated);
+  };
+
+  const handleWrite = async () => {
+    if (!fhirPatientId.trim()) {
+      toast.error("FHIR Patient ID is required");
+      return;
+    }
+    if (!name.trim()) {
+      toast.error("Patient Name is required");
+      return;
+    }
+
+    // Filter valid emergency contacts
+    const validContacts = emergencyContacts.filter(c => c.userId.trim() && c.name.trim());
+
+    setIsWriting(true);
+    try {
+      // 1. Generate local ECDSA signed payload from form fields
       const payload = await NfcCryptoService.generateTagPayload({
-        name: patientData.name,
-        bloodGroup: patientData.bloodGroup,
-        allergies: patientData.allergies,
-        emergencyContacts: patientData.emergencyContacts,
-        dnrStatus: patientData.dnrStatus,
-        fhirPatientId: patientData.accountId,
-        authoritySignature: patientData.authoritySignature,
+        name,
+        bloodGroup,
+        allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
+        emergencyContacts: validContacts,
+        dnrStatus,
+        fhirPatientId,
+        authoritySignature: authoritySignature || undefined,
       });
 
-      // 3. Check the byte size limit
-      const { rawBytes } = await NfcCryptoService.calculateByteSize(payload);
+      // 2. Compress the payload using native Gzip Compression Stream
+      const compressedBytes = await NfcCryptoService.compressPayload(payload);
       
-      if (rawBytes > 504) {
-        const errorMsg = `Payload too large (${rawBytes} bytes). Max limit is 504 bytes.`;
-        toast.error(errorMsg);
-        onWriteError(errorMsg);
-        setIsWriting(false);
-        return;
+      console.log(`Payload prepared. Raw JSON size: ${JSON.stringify(payload).length} bytes. Compressed size: ${compressedBytes.length} bytes.`);
+
+      if (compressedBytes.length > 504) {
+        throw new Error(`Compressed payload size (${compressedBytes.length} bytes) exceeds standard NTAG215 budget (504 bytes). Please reduce input fields.`);
       }
 
-      const payloadString = JSON.stringify(payload);
-
       if (isNfcSupported) {
-        // @ts-ignore - NDEFReader is not in TypeScript's lib.dom yet
+        // @ts-ignore
         const ndef = new NDEFReader();
-        
-        toast.info(`Hold an NFC tag near your device... (${rawBytes} bytes)`);
-        
-        // 4. Write the JSON payload as a text record
+        toast.info(`Hold the NFC tag near your device... (${compressedBytes.length} bytes)`);
+
+        // 3. Write raw Gzip compressed bytes as an octet-stream MIME record
         await ndef.write({
-          records: [{ 
-            recordType: "text", 
-            data: payloadString,
-            lang: "en" 
-          }]
+          records: [
+            {
+              recordType: "mime",
+              mediaType: "application/octet-stream",
+              data: compressedBytes
+            }
+          ]
         });
-        
-        console.log("Successfully wrote to NFC tag:", payload);
-        onWriteComplete(accountId);
-        toast.success("Account ID written successfully!");
+
+        console.log("Successfully wrote compressed payload to tag:", payload);
+        toast.success("Compressed NFC Tag written successfully!");
+        onWriteComplete(fhirPatientId);
       } else {
         // Simulate writing for unsupported browsers
-        toast.info(`Simulating NFC write... (${rawBytes} bytes)`);
-        setTimeout(() => {
-          onWriteComplete(accountId);
-          toast.success("Simulation: Account ID written successfully!");
-        }, 2000);
+        toast.info(`Simulating NFC write of compressed payload... (${compressedBytes.length} bytes)`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        toast.success("Simulation: NFC Tag written successfully!");
+        onWriteComplete(fhirPatientId);
       }
     } catch (error: any) {
       console.error("NFC Write Error:", error);
-      
-      // Handle permission denied and other standard errors
       let errorMessage = error.message || "Failed to write to NFC tag";
       if (error.name === 'NotAllowedError') {
         errorMessage = "NFC permission denied. Please allow NFC access.";
       } else if (error.name === 'NotSupportedError') {
         errorMessage = "NFC is not supported on this device.";
       }
-      
       onWriteError(errorMessage);
       toast.error(`Write failed: ${errorMessage}`);
     } finally {
@@ -114,34 +164,196 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-md mx-auto p-4">
-      <h2 className="text-xl font-bold text-center">Admin: Write NFC Tag</h2>
+    <Card className="w-full max-w-2xl mx-auto shadow-md">
+      <CardHeader className="bg-slate-50 border-b">
+        <CardTitle className="text-xl font-bold flex items-center gap-2">
+          <Edit className="h-5 w-5 text-lifetag-primary" />
+          Emergency Triage Card Writer
+        </CardTitle>
+      </CardHeader>
       
-      <div className="flex items-center gap-2">
-        <Input
-          type="text"
-          placeholder="Enter 5-digit account ID"
-          value={accountId}
-          onChange={(e) => setAccountId(e.target.value.replace(/\D/g, '').substring(0, 5))}
-          maxLength={5}
-          className="flex-1"
-        />
-        <Button 
-          onClick={handleWrite}
-          disabled={isWriting || !validateAccountId(accountId)}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <Edit className="mr-2 h-4 w-4" />
-          {isWriting ? "Writing..." : "Write"}
-        </Button>
-      </div>
-      
-      {isNfcSupported === false && (
-        <p className="text-center text-orange-500 text-sm">
-          NFC is not supported in this browser. Using simulation mode.
-        </p>
-      )}
-    </div>
+      <CardContent className="pt-6 space-y-6">
+        {/* Fetch Section */}
+        <div className="bg-slate-100 p-4 rounded-lg flex flex-col md:flex-row gap-3 items-end">
+          <div className="flex-1 space-y-2">
+            <Label htmlFor="fetchAccountId">Auto-Fill from Account ID</Label>
+            <Input
+              id="fetchAccountId"
+              type="text"
+              placeholder="Enter 5-digit account ID"
+              value={fetchAccountId}
+              onChange={(e) => setFetchAccountId(e.target.value.replace(/\D/g, '').substring(0, 5))}
+              maxLength={5}
+            />
+          </div>
+          <Button 
+            variant="outline"
+            onClick={handleFetchProfile}
+            disabled={isFetching || !/^\d{5}$/.test(fetchAccountId)}
+            className="flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            {isFetching ? "Fetching..." : "Fetch Profile"}
+          </Button>
+        </div>
+
+        <Separator />
+
+        {/* Triage Form Fields */}
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg">Patient Triage Information</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fhirPatientId">FHIR Patient ID (5-digit Account ID)</Label>
+              <Input
+                id="fhirPatientId"
+                placeholder="e.g. 12345"
+                value={fhirPatientId}
+                onChange={(e) => setFhirPatientId(e.target.value.replace(/\D/g, '').substring(0, 5))}
+                maxLength={5}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="patientName">Full Name</Label>
+              <Input
+                id="patientName"
+                placeholder="Enter patient full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="bloodGroup">Blood Group</Label>
+              <Select value={bloodGroup} onValueChange={setBloodGroup}>
+                <SelectTrigger id="bloodGroup">
+                  <SelectValue placeholder="Select blood group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A-Positive">A+</SelectItem>
+                  <SelectItem value="A-Negative">A-</SelectItem>
+                  <SelectItem value="B-Positive">B+</SelectItem>
+                  <SelectItem value="B-Negative">B-</SelectItem>
+                  <SelectItem value="AB-Positive">AB+</SelectItem>
+                  <SelectItem value="AB-Negative">AB-</SelectItem>
+                  <SelectItem value="O-Positive">O+</SelectItem>
+                  <SelectItem value="O-Negative">O-</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="allergies">Allergies (comma-separated)</Label>
+              <Input
+                id="allergies"
+                placeholder="e.g. Penicillin, Peanuts, Latex"
+                value={allergiesText}
+                onChange={(e) => setAllergiesText(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 border rounded-lg bg-slate-50">
+            <div className="space-y-0.5">
+              <Label htmlFor="dnrStatus" className="font-medium">Do Not Resuscitate (DNR) Status</Label>
+              <p className="text-sm text-slate-500">Enable if patient has a verified DNR directive</p>
+            </div>
+            <Switch
+              id="dnrStatus"
+              checked={dnrStatus}
+              onCheckedChange={setDnrStatus}
+            />
+          </div>
+
+          {/* Emergency Contacts */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <Label className="font-semibold text-base">Emergency Contacts</Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={handleAddContact}
+                className="flex items-center gap-1 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Contact
+              </Button>
+            </div>
+
+            {emergencyContacts.map((contact, index) => (
+              <div key={index} className="flex gap-3 items-end p-3 border rounded-lg bg-slate-50/50">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-500">Contact Name</Label>
+                    <Input
+                      placeholder="Jane Doe"
+                      value={contact.name}
+                      onChange={(e) => handleContactChange(index, "name", e.target.value)}
+                      className="bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-500">Contact User ID</Label>
+                    <Input
+                      placeholder="US54321"
+                      value={contact.userId}
+                      onChange={(e) => handleContactChange(index, "userId", e.target.value)}
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => handleRemoveContact(index)}
+                  disabled={emergencyContacts.length === 1 && !contact.userId && !contact.name}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Authority Certificate */}
+          <div className="space-y-2">
+            <Label htmlFor="authSig">Healthcare Authority Digital Certificate</Label>
+            <Input
+              id="authSig"
+              value={authoritySignature}
+              disabled
+              placeholder="Fetched automatically from portal database"
+              className="bg-slate-100 italic text-xs text-slate-500 truncate"
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Action Button */}
+        <div className="space-y-2">
+          <Button 
+            onClick={handleWrite}
+            disabled={isWriting || !name.trim() || !fhirPatientId.trim()}
+            className="w-full bg-green-600 hover:bg-green-700 font-semibold"
+          >
+            {isWriting ? "Writing to Tag..." : "Write Compressed Payload to NFC"}
+          </Button>
+          
+          {isNfcSupported === false && (
+            <p className="text-center text-orange-500 text-xs">
+              NFC is not supported in this browser. Running in Simulation mode.
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
