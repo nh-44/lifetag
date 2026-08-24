@@ -15,6 +15,10 @@ import { makeToken, makeAuthHeader } from '../helpers/authHelpers';
 import { Role } from '../../constants/roles';
 import { beforeEach } from 'vitest';
 
+beforeEach(async () => {
+  await cleanDb();
+});
+
 // ─── P0: Hardcoded admin password check ───────────────────────────────────────
 
 describe('P0: Hardcoded admin password', () => {
@@ -186,5 +190,116 @@ describe('Tampered JWT is rejected by authMiddleware before reaching any route l
       .set(makeAuthHeader(tampered));
 
     expect(res.status).toBe(401);
+  });
+});
+
+// ─── Crypto Adversarial: Stale payload replay ─────────────────────────────────
+
+describe('Crypto Adversarial: Stale payload replay', () => {
+  it('rejects a valid payload that is older than the staleness threshold (48h)', async () => {
+    const crypto = await import('crypto');
+    const { user: patient } = await seedUser({ userId: 'US99001', accountId: '99001' });
+    const { user: firstResponder } = await seedFirstResponder({ userId: 'FR99001', accountId: '99002' });
+    const frToken = makeToken('FR99001', Role.FIRST_RESPONDER);
+
+    const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const pubJwk = keys.publicKey.export({ format: 'jwk' });
+    const tagId = JSON.stringify(pubJwk);
+
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+    const triageData = {
+      name: 'Old Patient',
+      bloodGroup: 'O+',
+      allergies: [],
+      emergencyContacts: [],
+      dnrStatus: false
+    };
+
+    const payloadToSign = Buffer.from(JSON.stringify(triageData));
+    const signer = crypto.createSign('SHA256');
+    signer.update(payloadToSign);
+    const signature = signer.sign(keys.privateKey).toString('base64');
+
+    const tagPayload = {
+      version: '1.0',
+      tagId: tagId,
+      timestamp: staleDate,
+      fhirPatientId: patient.accountId,
+      triageData,
+      signature
+    };
+
+    const res = await request(app)
+      .post('/api/v1/scans')
+      .set(makeAuthHeader(frToken))
+      .send({
+        patientAccount: patient.accountId,
+        deviceMeta: 'Replay Attacker Device',
+        tagPayload
+      });
+
+    // We expect the server to reject a 48h old payload with 400 Bad Request
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─── Crypto Adversarial: Trust-downgrade enforcement ──────────────────────────
+
+describe('Crypto Adversarial: Trust-downgrade enforcement', () => {
+  it('blocks access to medical records if the scan was performed with a self-signed (uncertified) tag', async () => {
+    const crypto = await import('crypto');
+    const { user: patient } = await seedUser({ userId: 'US99003', accountId: '99003' });
+    const { user: doctor } = await seedDoctor({ userId: 'DR99003', accountId: '99004' });
+    const drToken = makeToken('DR99003', Role.DOCTOR);
+
+    const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const pubJwk = keys.publicKey.export({ format: 'jwk' });
+    const tagId = JSON.stringify(pubJwk);
+
+    const triageData = {
+      name: 'Attacker Profile',
+      bloodGroup: 'O+',
+      allergies: [],
+      emergencyContacts: [],
+      dnrStatus: false
+    };
+
+    const payloadToSign = Buffer.from(JSON.stringify(triageData));
+    const signer = crypto.createSign('SHA256');
+    signer.update(payloadToSign);
+    const signature = signer.sign(keys.privateKey).toString('base64');
+
+    const tagPayload = {
+      version: '1.0',
+      tagId: tagId,
+      timestamp: new Date().toISOString(),
+      fhirPatientId: patient.accountId,
+      triageData,
+      signature
+      // NO authoritySignature because attacker doesn't have the Authority Private Key!
+    };
+
+    // Doctor scans the attacker's fake self-signed tag
+    const scanRes = await request(app)
+      .post('/api/v1/scans')
+      .set(makeAuthHeader(drToken))
+      .send({
+        patientAccount: patient.accountId,
+        deviceMeta: 'Attacker Fake Tag',
+        tagPayload
+      });
+
+    // The scan gets logged successfully (201) because the patient signature is technically valid for its own public key
+    expect(scanRes.status).toBe(201);
+
+    // NOW the attacker hopes the doctor can access the patient's full medical records!
+    // But since the tag lacked the Authority signature, the trust downgrade should prevent access.
+    const medicalRes = await request(app)
+      .get(`/api/v1/patients/medical/${patient.accountId}`)
+      .set(makeAuthHeader(drToken));
+
+    // Access must be denied (403) because the scan was NOT Authority-Certified.
+    expect(medicalRes.status).toBe(403);
   });
 });
