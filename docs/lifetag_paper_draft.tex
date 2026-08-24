@@ -176,13 +176,15 @@ Table~\ref{tab:crypto_times} summarizes the execution latency for the cryptograp
 \begin{center}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Operation} & \textbf{Avg (ms)} & \textbf{Min (ms)} & \textbf{Max (ms)} \\
+\textbf{Operation} & \textbf{p50 (ms)} & \textbf{p95 (ms)} & \textbf{p99 (ms)} \\
 \midrule
-Key Generation & 0.212 & 0.078 & 7.573 \\
-Signature Creation & 0.113 & 0.068 & 0.966 \\
-Signature Verification & 0.141 & 0.100 & 0.432 \\
-Gzip Compression & 0.076 & 0.034 & 0.495 \\
-Gzip Decompression & 0.018 & 0.011 & 0.105 \\
+ECDSA P-256 Key Generation & 0.050 & 0.208 & 0.244 \\
+ECDSA P-256 Signing & 0.045 & 0.161 & 0.315 \\
+ECDSA P-256 Verification & 0.140 & 0.511 & 0.629 \\
+Gzip Compression & 0.059 & 0.265 & 0.867 \\
+Gzip Decompression & 0.030 & 0.210 & 1.213 \\
+Kyber-768 Encapsulation & 0.007 & 0.019 & 0.052 \\
+Kyber-768 Decapsulation & 0.006 & 0.043 & 0.103 \\
 \bottomrule
 \end{tabular}
 \label{tab:crypto_times}
@@ -190,17 +192,18 @@ Gzip Decompression & 0.018 & 0.011 & 0.105 \\
 \end{table}
 
 \subsection{Payload Capacity Results}
-Table~\ref{tab:payload_sizes} shows the payload size across different modes. Standard Mode compresses 544 bytes of raw patient data to **295.3 bytes** (Base64 NDEF format: 394 bytes), which easily fits standard NTAG215 tags. In Compact Mode (NTAG213), the payload is compressed to **99 bytes**, fitting within the 144-byte limit.
+Table~\ref{tab:payload_sizes} shows the payload size across Small, Medium, and Large profile distributions. The final application payload footprint is evaluated after applying the full serialization pipeline (\texttt{toShortFormat} $\rightarrow$ Gzip $\rightarrow$ Base64 $\rightarrow$ ``gzip:'' prefix) and before accounting for standard NDEF wrapper overhead. The Small (397 B) and Medium (457 B) profiles successfully fit within the 504-byte NTAG215 budget. However, the Large profile (601 B) exceeds the configured 504-byte NTAG215 payload budget.
 
 \begin{table}[htbp]
 \caption{Payload Size Comparison (Bytes)}
 \begin{center}
-\begin{tabular}{lccc}
+\begin{tabular}{lcc}
 \toprule
-\textbf{Mode} & \textbf{Raw JSON} & \textbf{Compact JSON} & \textbf{Gzip / Base64} \\
+\textbf{Profile Size} & \textbf{Final Payload (B)} & \textbf{Fits Configured 504-B Payload Budget} \\
 \midrule
-Standard Mode (NTAG215) & 544.0 & 329.8 & 295.3 / 394.0 \\
-Ultra-Compact (NTAG213) & 200.0 & 99.0 & N/A / 99.0 \\
+Small & 397 & Yes \\
+Medium & 457 & Yes \\
+Large & 601 & No \\
 \bottomrule
 \end{tabular}
 \label{tab:payload_sizes}
@@ -208,7 +211,7 @@ Ultra-Compact (NTAG213) & 200.0 & 99.0 & N/A / 99.0 \\
 \end{table}
 
 \subsection{Tampering Detection}
-To validate tampering detection, we simulated payload modification by altering one character of the triage data on the tag. The verification engine caught the mismatch, returning a signature verification failure in 100\% of altered cases, confirming the integrity model.
+To validate tampering detection, we simulated payload modification by altering triage data across 100 maliciously mutated payloads. The verification engine correctly identified and rejected all 100 mutations (0 missed), achieving a 100\% detection rate and confirming the offline cryptographic integrity model.
 
 \subsection{Discussion}
 Our results show that key shortening and data packing are essential for deploying asymmetric cryptography on cheap passive tags. By using ECDSA and Gzip, we achieved a size reduction of **45.7\%** in compact mode, solving the storage constraints of NTAG213/215.
