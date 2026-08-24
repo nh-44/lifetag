@@ -176,13 +176,13 @@ Two rules applied below:
 1. **Hardware QA is fully self-contained with Naveen** — both writing the hardware checklist and executing it, since it requires physical device possession and his existing crypto/benchmark ownership (§3.6, §7) already ties directly into it.
 2. **Everywhere else, the person who writes a test suite does not run/sign it off** — a different teammate executes it and reports results back to the author. This catches "I wrote it so of course it passes" blind spots and matches the plan's Phase 1 priority (RBAC/consent) getting a second set of eyes.
 
-Assignments below build on existing file ownership from `LifeTag_Team_Work_Division.md` where it lines up; noted explicitly where this reassigns something (Navyashree was originally sole QA lead — hardware QA moves off her plate here per your instruction, freeing her for the cross-cutting security/E2E/CI work below).
+Assignments below build on existing file ownership from `LifeTag_Team_Work_Division.md` where it lines up; noted explicitly where this reassigns something (Naveen's hardware and crypto ownership remains grouped together, while Navyashree takes the cross-cutting security/E2E/CI work below).
 
-### Navyashree — Crypto, Benchmarks & Full Hardware QA (creates *and* runs, solo)
+### Naveen — Crypto, Benchmarks & Full Hardware QA (creates *and* runs, solo)
 - §3.6 — Crypto/NFC service unit tests (`crypto.utils.ts`, `nfc.service.ts`, `security.spec.ts` port)
 - §7 — Performance/benchmark tests: crypto/compression latency, payload-size distribution, tamper-detection rate, **and** physical NFC read/write handshake timing
 - §8 — Full manual hardware QA checklist (NTAG215/216 physical trials, weak-coupling/partial-write behavior, browser-support degradation)
-- Directly feeds `docs/lifetag_paper_draft.tex` Section VII — Naveen owns turning these results into the paper's tables
+- Directly feeds `docs/lifetag_paper_draft.tex` Section VII — Navyashree owns turning these results into the paper's tables
 
 ### Preksha — Server Unit & Integration Tests (creates)
 - §3.1 `auth.service`/`auth.controller`
@@ -198,7 +198,7 @@ Assignments below build on existing file ownership from `LifeTag_Team_Work_Divis
 - Also picks up the existing NFC-component branch-coverage gaps flagged in §4 (`NfcScanner.tsx` at 64.8% branch coverage, `AdminPanel.tsx` password/state-transition paths) as part of her broader client sweep
 - **Run/verified by: Preksha**
 
-### Naveen — Security/Adversarial, E2E & CI Tooling (creates)
+### Navyashree — Security/Adversarial, E2E & CI Tooling (creates)
 - §6 — Security/adversarial cases *excluding* the crypto-specific ones under Naveen (replay/freshness, trust-downgrade enforcement tracing, cross-role token reuse, admin-panel hardcoded-password P0 finding, rate-limit-mounted check)
 - §10 — E2E flow set (Playwright)
 - §9 — Tooling & CI changes (server test runner setup, coverage gates, lint step, Playwright integration)
@@ -217,11 +217,11 @@ Each runner reports pass/fail + coverage back to the author, not just to the gro
 
 Mapped to the existing ownership in `LifeTag_Team_Work_Division.md` so each person is testing code they already know, with one person dedicated entirely to hardware QA (no software test-writing load, since physical NFC testing has its own overhead — device time, tag stock, multiple browsers/OSes).
 
-### Naveen — Crypto & Software Benchmarks
+### Navyashree — Crypto & Software Benchmarks
 - §3.6 — `crypto.utils.ts` / `nfc.service.ts` unit tests (port `security.spec.ts` into the new framework, add the new cases: missing authority signature, forged authority signature, malformed JWK, byte-budget across profile sizes).
 - §6 crypto-adjacent adversarial cases: replay of a stale signed payload, trust-downgrade enforcement trace (does `trustedAuthority: false` actually get blocked downstream, or just computed?).
 - §7 **software-side** benchmarks only (no hardware needed): crypto/compression latency table, payload size across the profile-size distribution, tamper detection rate. Runs against the `/api/v1/benchmarks` endpoint.
-- Hands off physical NFC timing numbers to Navyashree (§7 hardware half) — the two of them jointly own populating the paper's Results tables.
+- Hands off physical NFC timing numbers to Naveen (§7 hardware half) — the two of them jointly own populating the paper's Results tables.
 
 ### Preksha — Backend, Auth, Access Control
 - §3.1–§3.5, §3.7 — auth service/controller, `rbac.middleware`, `consent.middleware` (P0 — this is the paper's core claimed contribution), `validate.middleware`, `rateLimit.middleware`, repositories.
@@ -235,12 +235,12 @@ Mapped to the existing ownership in `LifeTag_Team_Work_Division.md` so each pers
 - §10 — Playwright E2E setup and the four flows listed (mock Web Crypto/Web NFC at the browser-API boundary; the physical scan itself stays with Navyashree in §8).
 - Sequence after Preksha's server framework and Naveen/Preksha's unit layers are in place, since E2E exercises the real stack.
 
-### Navyashree — Full Hardware QA (dedicated)
+### Naveen — Full Hardware QA (dedicated)
 - §8 in full: physical read/write against NTAG215 *and* NTAG216, Web NFC support/degradation check across target devices, weak-RF/low-battery partial-write behavior, rapid-succession scan handling, IndexedDB private-key persistence-across-logout check.
 - §7 **hardware-side** benchmarks only: NFC read/write handshake latency (1–4cm range, N physical trials), logged through the same `/api/v1/benchmarks` endpoint Naveen's software-side numbers go through, so both halves land in the same table.
 - No unit/component/integration test-writing load in this split — the physical QA surface (multiple tags, multiple devices, multiple browser states) is treated as a full workload on its own.
-- Delivers raw hardware timing data to Naveen for the joint Results section in the paper.
+- Delivers raw hardware timing data to Navyashree for the joint Results section in the paper.
 
 ### Cross-cutting notes
-- **Blocking order**: Preksha's server test-framework setup (§9) blocks Navyashree's and Preksha's own unit tests, which block Nandita's E2E work. Naveen's hardware QA has no software dependency and can start immediately in parallel.
+- **Blocking order**: Preksha's server test-framework setup (§9) blocks Naveen's and Preksha's own unit tests, which block Nandita's E2E work. Navyashree's security/E2E/CI work depends on the relevant test layers, while Naveen's hardware QA can start immediately in parallel.
 - **Shared deliverable**: the paper's Results section (Section VII of `lifetag_paper_draft.tex`) needs both Navyashree's software-side numbers and Naveen's hardware-side numbers — flag this as a joint checkpoint before that section can be finalized, not two independent handoffs.
