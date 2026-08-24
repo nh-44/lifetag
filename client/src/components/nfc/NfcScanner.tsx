@@ -67,9 +67,39 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                 parseErrorDetail = e.message || "Decompression failed";
               }
             } else if (record.recordType === "text") {
-              const textDecoder = new TextDecoder(record.encoding || "utf-8");
               try {
-                const textContent = textDecoder.decode(record.data);
+                // Robust NDEF text record parser (strips status byte and lang prefix if present)
+                const rawData = record.data;
+                let recordBytes: Uint8Array;
+                if (rawData instanceof ArrayBuffer) {
+                  recordBytes = new Uint8Array(rawData);
+                } else if (rawData && rawData.buffer instanceof ArrayBuffer) {
+                  recordBytes = new Uint8Array(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+                } else if (rawData instanceof Uint8Array) {
+                  recordBytes = rawData;
+                } else {
+                  recordBytes = new Uint8Array(rawData || []);
+                }
+                
+                let textContent = "";
+                const directDecoder = new TextDecoder(record.encoding || "utf-8");
+                const directDecoded = directDecoder.decode(recordBytes);
+                
+                if (directDecoded.startsWith("gzip:") || directDecoded.startsWith("{") || directDecoded.includes('{"')) {
+                  textContent = directDecoded;
+                } else if (recordBytes.length > 0) {
+                  const statusByte = recordBytes[0];
+                  const isUtf16 = (statusByte & 0x80) !== 0;
+                  const langCodeLen = statusByte & 0x3F;
+                  if (1 + langCodeLen < recordBytes.length) {
+                    const textBytes = recordBytes.slice(1 + langCodeLen);
+                    const manualDecoder = new TextDecoder(isUtf16 ? "utf-16" : "utf-8");
+                    textContent = manualDecoder.decode(textBytes);
+                  } else {
+                    textContent = directDecoded;
+                  }
+                }
+
                 if (textContent.startsWith("gzip:")) {
                   // Decompress base64 Gzip string
                   const base64Str = textContent.substring(5);
