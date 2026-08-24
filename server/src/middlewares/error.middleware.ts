@@ -19,7 +19,7 @@ export const errorHandler = (err: AppError, _req: Request, res: Response, _next:
     success: false,
     error: {
       code,
-      message: env.NODE_ENV === 'development' ? message : 'An unexpected error occurred',
+      message: (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') ? message : 'An unexpected error occurred',
     },
   });
 };

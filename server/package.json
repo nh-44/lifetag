@@ -12,9 +12,15 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "lint": "eslint . --ext .ts",
+    "test": "vitest run",
+    "test:unit": "vitest run --reporter=verbose src/tests/unit",
+    "test:integration": "vitest run --reporter=verbose src/tests/integration src/tests/security",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "test:security": "tsx src/utils/security.spec.ts",
     "db:seed": "prisma db seed",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "db:test:setup": "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public\" prisma db push"
   },
   "keywords": [
     "lifetag",
@@ -46,12 +52,16 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "^7.15.0",
     "@typescript-eslint/parser": "^7.15.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^8.57.0",
+    "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.11",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
