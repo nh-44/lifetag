@@ -34,6 +34,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   const [authoritySignature, setAuthoritySignature] = useState("");
   const [generatedPayloadText, setGeneratedPayloadText] = useState("");
   const [generatedPayloadHex, setGeneratedPayloadHex] = useState("");
+  const [isCompactMode, setIsCompactMode] = useState(false);
 
   // Check if NFC is supported
   useEffect(() => {
@@ -122,16 +123,32 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
 
     setIsWriting(true);
     try {
-      // 1. Generate local ECDSA signed payload from form fields
-      const payload = await NfcCryptoService.generateTagPayload({
-        name,
-        bloodGroup,
-        allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
-        emergencyContacts: validContacts,
-        dnrStatus,
-        fhirPatientId,
-        authoritySignature: authoritySignature || undefined,
-      });
+      let payload: any;
+      if (isCompactMode) {
+        payload = {
+          version: "2.0",
+          timestamp: new Date().toISOString(),
+          fhirPatientId,
+          triageData: {
+            name,
+            bloodGroup,
+            allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
+            emergencyContacts: validContacts,
+            dnrStatus,
+          }
+        };
+      } else {
+        // 1. Generate local ECDSA signed payload from form fields
+        payload = await NfcCryptoService.generateTagPayload({
+          name,
+          bloodGroup,
+          allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
+          emergencyContacts: validContacts,
+          dnrStatus,
+          fhirPatientId,
+          authoritySignature: authoritySignature || undefined,
+        });
+      }
 
       // 2. Compress the payload using native Gzip Compression Stream
       const compressedBytes = await NfcCryptoService.compressPayload(payload);
@@ -270,6 +287,27 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
         {/* Triage Form Fields */}
         <div className="space-y-4">
           <h3 className="font-semibold text-lg">Patient Triage Information</h3>
+          
+          <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+            <input 
+              type="checkbox" 
+              id="compactMode" 
+              checked={isCompactMode} 
+              onChange={(e) => setIsCompactMode(e.target.checked)}
+              className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+            />
+            <div className="grid gap-1.5 leading-none">
+              <label 
+                htmlFor="compactMode" 
+                className="text-xs font-bold text-amber-900 cursor-pointer"
+              >
+                ⚡ Ultra-Compact Mode (for NTAG213 Tags)
+              </label>
+              <p className="text-[10px] text-amber-700">
+                Bypasses signatures/keys to compress payload to ~45 bytes, fitting easily on NTAG213 (144B) chips.
+              </p>
+            </div>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
