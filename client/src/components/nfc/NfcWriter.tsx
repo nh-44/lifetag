@@ -32,6 +32,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
     { userId: "", name: "" }
   ]);
   const [authoritySignature, setAuthoritySignature] = useState("");
+  const [generatedPayloadText, setGeneratedPayloadText] = useState("");
 
   // Check if NFC is supported
   useEffect(() => {
@@ -87,6 +88,15 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
     setEmergencyContacts(updated);
   };
 
+  const handleCopyPayload = () => {
+    if (!generatedPayloadText) {
+      toast.error("Please generate/write the payload first to copy it.");
+      return;
+    }
+    navigator.clipboard.writeText(generatedPayloadText);
+    toast.success("NFC Payload copied to clipboard!");
+  };
+
   const handleWrite = async () => {
     if (!fhirPatientId.trim()) {
       toast.error("FHIR Patient ID is required");
@@ -134,6 +144,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
       
       const compressedBase64 = binaryToBase64(compressedBytes);
       const textRecordValue = `gzip:${compressedBase64}`;
+      setGeneratedPayloadText(textRecordValue);
 
       if (isNfcSupported) {
         // @ts-ignore
@@ -388,6 +399,28 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
             <p className="text-center text-orange-500 text-xs">
               NFC is not supported in this browser. Running in Simulation mode.
             </p>
+          )}
+
+          {generatedPayloadText && (
+            <div className="mt-4 p-4 border rounded-lg bg-blue-50/50 border-blue-100 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-blue-800">📋 Manual Write Workaround</span>
+                <Button 
+                  onClick={handleCopyPayload}
+                  variant="outline" 
+                  size="sm"
+                  className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-xs h-8"
+                >
+                  Copy NDEF String
+                </Button>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                If the browser throws a connection/IO error on your phone, copy the NDEF string above, open <strong>NFC Tools</strong> on your phone, go to <strong>Write</strong> → <strong>Add a record</strong> → <strong>Text</strong>, paste it, and write it to your tag. The LifeTag scanner will read and decompress it perfectly!
+              </p>
+              <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
+                {generatedPayloadText}
+              </div>
+            </div>
           )}
         </div>
       </div>
