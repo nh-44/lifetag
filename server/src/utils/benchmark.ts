@@ -5,6 +5,53 @@ import { CryptoUtils } from './crypto.utils';
 import { NfcService, TriagePayload } from '../services/nfc.service';
 
 /**
+ * Minifies the payload to perfectly mirror the production WebNFC client output.
+ */
+function toShortFormat(payload: TriagePayload): any {
+  let kStr = payload.tagId;
+  try {
+    const jwk = JSON.parse(payload.tagId);
+    if (jwk.x && jwk.y) {
+      kStr = `${jwk.x}.${jwk.y}`;
+    }
+  } catch (e) {}
+
+  const tNum = Math.floor(new Date(payload.timestamp).getTime() / 1000);
+
+  const bgMap: Record<string, string> = {
+    "O-Negative": "O-", "O-Positive": "O+",
+    "A-Negative": "A-", "A-Positive": "A+",
+    "B-Negative": "B-", "B-Positive": "B+",
+    "AB-Negative": "AB-", "AB-Positive": "AB+"
+  };
+  const shortBg = bgMap[payload.triageData.bloodGroup] || payload.triageData.bloodGroup;
+
+  const cleanAllergies = payload.triageData.allergies.filter(
+    (a: string) => a.toLowerCase() !== "none" && a.toLowerCase() !== "no allergies"
+  );
+
+  return {
+    v: payload.version,
+    t: tNum,
+    id: payload.fhirPatientId,
+    iu: undefined,
+    d: {
+      n: payload.triageData.name,
+      b: shortBg,
+      a: cleanAllergies,
+      c: payload.triageData.emergencyContacts.map((c: any) => ({
+        u: c.userId,
+        n: c.name
+      })),
+      dnr: payload.triageData.dnrStatus
+    },
+    k: kStr,
+    s: payload.signature,
+    as: payload.authoritySignature
+  };
+}
+
+/**
  * Upgraded LifeTag Cryptographic, Key Generation, & Compression Latency Benchmark
  * Conducts exact performance profiling across 100 runs.
  */
@@ -44,20 +91,85 @@ export function runBenchmark(iterations: number = 100) {
   console.log(`======================================================================\n`);
 
   // Size Comparison Metrics
-  const rawString = JSON.stringify(samplePayload);
-  const rawBytes = Buffer.byteLength(rawString, 'utf8');
-  
-  const gzipBuffer = zlib.gzipSync(Buffer.from(rawString, 'utf8'));
-  const gzipBytes = gzipBuffer.length;
-  
-  const deflateBuffer = zlib.deflateSync(Buffer.from(rawString, 'utf8'));
-  const deflateBytes = deflateBuffer.length;
+  const smallProfile: TriagePayload = {
+    ...samplePayload,
+    triageData: {
+      name: 'Jane Doe',
+      bloodGroup: 'A+',
+      allergies: [],
+      emergencyContacts: [{ userId: 'US1', name: 'Bob' }],
+      dnrStatus: false,
+    }
+  };
+
+  const largeProfile: TriagePayload = {
+    ...samplePayload,
+    triageData: {
+      name: 'Jonathan Bartholomew Doe III',
+      bloodGroup: 'AB-Negative',
+      allergies: ['Penicillin', 'Peanuts', 'Bee Stings', 'Latex', 'Aspirin', 'Sulfa Drugs', 'Ibuprofen', 'Shellfish', 'Dairy', 'Gluten'],
+      emergencyContacts: [
+        { userId: 'US98234', name: 'Jane Doe' },
+        { userId: 'US54321', name: 'Bob Smith' },
+        { userId: 'US11111', name: 'Alice Jones' },
+        { userId: 'US22222', name: 'Charlie Brown' },
+        { userId: 'US33333', name: 'Eve White' }
+      ],
+      dnrStatus: true,
+    }
+  };
+
+  const profiles = [
+    { name: 'Small Profile', data: smallProfile },
+    { name: 'Medium Profile', data: samplePayload },
+    { name: 'Large Profile', data: largeProfile }
+  ];
 
   console.log(`--- Payload Size Benchmark Results ---`);
-  console.log(`1. Raw JSON Payload size:      ${rawBytes} bytes`);
-  console.log(`2. Gzip Compressed size:        ${gzipBytes} bytes (Fits NTAG215: ${gzipBytes <= 504 ? 'YES' : 'NO'})`);
-  console.log(`3. Deflate Compressed size:     ${deflateBytes} bytes (Fits NTAG215: ${deflateBytes <= 504 ? 'YES' : 'NO'})`);
-  console.log(`Compression Efficiency (Gzip):  ${(Math.round(((rawBytes - gzipBytes) / rawBytes) * 10000) / 100)}%\n`);
+  console.log(`Note: Emulating production NfcWriter.tsx behavior (toShortFormat -> Gzip -> Base64 -> "gzip:" prefix)`);
+  console.log(`      Fits NTAG215 (504 bytes) is evaluated against this final application footprint.`);
+  console.log(`      (This excludes the ~7 byte standard NDEF Text Record wrapper overhead).`);
+  
+  for (const p of profiles) {
+    // Generate a valid JWK for the size simulation
+    const keyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const pubJwk = keyPair.publicKey.export({ format: 'jwk' });
+    
+    // WebCrypto IEEE P1363 signatures are exactly 64 bytes (88 base64 chars). Node defaults to DER (~71 bytes).
+    // To mirror production sizing exactly, we use a 64-byte dummy signature for the byte budget calculation.
+    const dummyP1363Signature = crypto.randomBytes(64).toString('base64');
+    
+    const executableProfile = {
+      ...p.data,
+      tagId: JSON.stringify(pubJwk),
+      signature: dummyP1363Signature
+    };
+
+    // Apply the production client-side minification
+    const shortPayload = toShortFormat(executableProfile);
+
+    const rawString = JSON.stringify(shortPayload);
+    const rawBytes = Buffer.byteLength(rawString, 'utf8');
+    
+    const gzipBuffer = zlib.gzipSync(Buffer.from(rawString, 'utf8'));
+    const gzipBytes = gzipBuffer.length;
+    
+    const base64String = gzipBuffer.toString('base64');
+    const base64Bytes = Buffer.byteLength(base64String, 'utf8');
+    
+    const finalPayloadString = `gzip:${base64String}`;
+    const finalPayloadBytes = Buffer.byteLength(finalPayloadString, 'utf8');
+    
+    const fits = finalPayloadBytes <= 504;
+    
+    console.log(`\n${p.name}:`);
+    console.log(`  Raw Minified JSON bytes: ${rawBytes}`);
+    console.log(`  Raw Gzip binary bytes:   ${gzipBytes}`);
+    console.log(`  Base64 payload bytes:    ${base64Bytes}`);
+    console.log(`  Final payload ("gzip:"): ${finalPayloadBytes}`);
+    console.log(`  Fits NTAG215:            ${fits ? 'YES' : 'NO'}`);
+  }
+  console.log();
 
   // Latency Metrics Arrays
   const ecdsaKeyGenTimes: number[] = [];
@@ -133,6 +245,42 @@ export function runBenchmark(iterations: number = 100) {
     kyberDecapTimes.push(t13 - t12);
   }
 
+  // --- Security: Tamper Detection Rate ---
+  let tamperDetectedCount = 0;
+  let tamperMissedCount = 0;
+
+  for (let i = 0; i < iterations; i++) {
+    // Generate valid signed payload
+    const keyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const pubJwk = keyPair.publicKey.export({ format: 'jwk' });
+    const signObj = crypto.createSign('SHA256');
+    signObj.update(JSON.stringify(samplePayload.triageData));
+    const validSignature = signObj.sign(keyPair.privateKey).toString('base64');
+    
+    // Mutate it maliciously
+    const maliciouslyAlteredTriageData = {
+      ...samplePayload.triageData,
+      bloodGroup: 'B-Positive' // Altered field
+    };
+    
+    const maliciousPayload: TriagePayload = {
+      ...samplePayload,
+      tagId: JSON.stringify(pubJwk),
+      signature: validSignature,
+      triageData: maliciouslyAlteredTriageData,
+    };
+    
+    // Use existing application verification logic
+    const integrity = NfcService.verifyTagIntegrity(maliciousPayload);
+    
+    if (!integrity.verified) {
+      tamperDetectedCount++;
+    } else {
+      tamperMissedCount++;
+    }
+  }
+  const detectionRate = (tamperDetectedCount / iterations) * 100;
+
   // Console output
   console.log(`--- Latency Performance Metrics (ms) ---`);
   console.table({
@@ -172,6 +320,12 @@ export function runBenchmark(iterations: number = 100) {
       p99: getPercentile(kyberDecapTimes, 99),
     }
   });
+  
+  console.log(`\n--- Security Verification Metrics ---`);
+  console.log(`Tamper Detection Run (${iterations} maliciously mutated payloads):`);
+  console.log(`Detected: ${tamperDetectedCount}`);
+  console.log(`Missed:   ${tamperMissedCount}`);
+  console.log(`Tamper Detection Rate: ${detectionRate.toFixed(2)}%`);
   console.log(`======================================================================\n`);
 }
 
