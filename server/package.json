@@ -17,7 +17,7 @@
     "test:integration": "vitest run --reporter=verbose src/tests/integration src/tests/security",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:security": "tsx src/utils/security.spec.ts",
+    "test:security": "vitest run src/tests/unit/crypto.utils.spec.ts src/tests/unit/nfc.service.spec.ts",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "db:test:setup": "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public\" prisma db push"

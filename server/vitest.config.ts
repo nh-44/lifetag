@@ -22,7 +22,6 @@ export default defineConfig({
         'src/utils/**',
       ],
       exclude: [
-        'src/utils/security.spec.ts',
         'src/utils/benchmark.ts',
       ],
       thresholds: {
