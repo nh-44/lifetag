@@ -294,6 +294,7 @@ export class NfcCryptoService {
       v: payload.version,
       t: tNum,
       id: payload.fhirPatientId,
+      iu: payload.isUnsigned || undefined,
       d: {
         n: payload.triageData.name,
         b: shortBg,
@@ -341,6 +342,7 @@ export class NfcCryptoService {
       version: short.v,
       timestamp,
       fhirPatientId: short.id,
+      isUnsigned: short.iu || false,
       triageData: {
         name: short.d.n,
         bloodGroup: fullBg,
