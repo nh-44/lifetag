@@ -122,6 +122,19 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
         throw new Error(`Compressed payload size (${compressedBytes.length} bytes) exceeds standard NTAG215 budget (504 bytes). Please reduce input fields.`);
       }
 
+      // Convert Uint8Array to Base64 string for robust text-based write
+      const binaryToBase64 = (bytes: Uint8Array) => {
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      };
+      
+      const compressedBase64 = binaryToBase64(compressedBytes);
+      const textRecordValue = `gzip:${compressedBase64}`;
+
       if (isNfcSupported) {
         // @ts-ignore
         const ndef = new NDEFReader();
@@ -129,13 +142,13 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
 
         const startTimer = performance.now();
 
-        // 3. Write raw Gzip compressed bytes as an octet-stream MIME record
+        // 3. Write Base64 Gzip payload as a standard text record (universally compatible)
         await ndef.write({
           records: [
             {
-              recordType: "mime",
-              mediaType: "application/octet-stream",
-              data: compressedBytes
+              recordType: "text",
+              data: textRecordValue,
+              lang: "en"
             }
           ]
         });

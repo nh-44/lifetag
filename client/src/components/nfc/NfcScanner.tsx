@@ -70,16 +70,32 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
               const textDecoder = new TextDecoder(record.encoding || "utf-8");
               try {
                 const textContent = textDecoder.decode(record.data);
-                const jsonStartIndex = textContent.indexOf('{');
-                if (jsonStartIndex !== -1) {
-                  const cleanJson = textContent.substring(jsonStartIndex);
-                  payload = JSON.parse(cleanJson);
-                  rawSize = cleanJson.length;
-                  compressedSize = rawSize; // No compression on legacy text
-                  console.log("Parsed legacy text JSON payload successfully:", payload);
+                if (textContent.startsWith("gzip:")) {
+                  // Decompress base64 Gzip string
+                  const base64Str = textContent.substring(5);
+                  const binaryStr = atob(base64Str);
+                  const len = binaryStr.length;
+                  const bytes = new Uint8Array(len);
+                  for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                  }
+                  payload = await NfcCryptoService.decompressPayload(bytes);
+                  compressedSize = bytes.length;
+                  rawSize = JSON.stringify(payload).length;
+                  console.log("Decompressed base64 Gzip tag payload successfully:", payload);
                   break;
                 } else {
-                  parseErrorDetail = "Invalid payload format. No JSON found.";
+                  const jsonStartIndex = textContent.indexOf('{');
+                  if (jsonStartIndex !== -1) {
+                    const cleanJson = textContent.substring(jsonStartIndex);
+                    payload = JSON.parse(cleanJson);
+                    rawSize = cleanJson.length;
+                    compressedSize = rawSize; // No compression on legacy text
+                    console.log("Parsed legacy text JSON payload successfully:", payload);
+                    break;
+                  } else {
+                    parseErrorDetail = "Invalid payload format. No JSON found.";
+                  }
                 }
               } catch (e: any) {
                 console.error("Error decoding text record:", e);
