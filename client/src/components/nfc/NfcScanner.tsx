@@ -118,10 +118,15 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                   const jsonStartIndex = textContent.indexOf('{');
                   if (jsonStartIndex !== -1) {
                     const cleanJson = textContent.substring(jsonStartIndex);
-                    payload = JSON.parse(cleanJson);
+                    const parsedObj = JSON.parse(cleanJson);
+                    if (parsedObj.d || parsedObj.id) {
+                      payload = NfcCryptoService.fromShortFormat(parsedObj);
+                    } else {
+                      payload = parsedObj;
+                    }
                     rawSize = cleanJson.length;
-                    compressedSize = rawSize; // No compression on legacy text
-                    console.log("Parsed legacy text JSON payload successfully:", payload);
+                    compressedSize = rawSize;
+                    console.log("Parsed text JSON payload successfully:", payload);
                     break;
                   } else if (/^\d{5}$/.test(textContent.trim())) {
                     const cleanId = textContent.trim();

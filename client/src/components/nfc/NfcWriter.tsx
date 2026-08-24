@@ -151,27 +151,35 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
         });
       }
 
-      // 2. Compress the payload using native Gzip Compression Stream
-      const compressedBytes = await NfcCryptoService.compressPayload(payload);
-      
-      console.log(`Payload prepared. Raw JSON size: ${JSON.stringify(payload).length} bytes. Compressed size: ${compressedBytes.length} bytes.`);
+      let compressedBytes: Uint8Array;
+      let textRecordValue: string;
 
-      if (compressedBytes.length > 504) {
-        throw new Error(`Compressed payload size (${compressedBytes.length} bytes) exceeds standard NTAG215 budget (504 bytes). Please reduce input fields.`);
+      if (isCompactMode) {
+        const shortPayload = NfcCryptoService.toShortFormat(payload);
+        const jsonString = JSON.stringify(shortPayload);
+        compressedBytes = new TextEncoder().encode(jsonString);
+        textRecordValue = jsonString;
+      } else {
+        compressedBytes = await NfcCryptoService.compressPayload(payload);
+        const binaryToBase64 = (bytes: Uint8Array) => {
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binary);
+        };
+        const compressedBase64 = binaryToBase64(compressedBytes);
+        textRecordValue = `gzip:${compressedBase64}`;
       }
-
-      // Convert Uint8Array to Base64 string for robust text-based write
-      const binaryToBase64 = (bytes: Uint8Array) => {
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
-      };
       
-      const compressedBase64 = binaryToBase64(compressedBytes);
-      const textRecordValue = `gzip:${compressedBase64}`;
+      const maxBudget = isCompactMode ? 137 : 504;
+      if (compressedBytes.length > maxBudget) {
+        throw new Error(isCompactMode
+          ? `Payload size (${compressedBytes.length} bytes) exceeds NTAG213 tag budget (137 bytes).`
+          : `Compressed payload size (${compressedBytes.length} bytes) exceeds standard NTAG215 budget (504 bytes). Please reduce input fields.`
+        );
+      }
       
       const bytesToHex = (bytes: Uint8Array) => {
         return Array.from(bytes)
