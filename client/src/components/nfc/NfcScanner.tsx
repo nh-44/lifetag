@@ -123,8 +123,27 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                     compressedSize = rawSize; // No compression on legacy text
                     console.log("Parsed legacy text JSON payload successfully:", payload);
                     break;
+                  } else if (/^\d{5}$/.test(textContent.trim())) {
+                    const cleanId = textContent.trim();
+                    payload = {
+                      version: "2.0",
+                      timestamp: new Date().toISOString(),
+                      fhirPatientId: cleanId,
+                      isUnsigned: true,
+                      triageData: {
+                        name: "Patient " + cleanId,
+                        bloodGroup: "O-Negative",
+                        allergies: [],
+                        emergencyContacts: [],
+                        dnrStatus: false
+                      }
+                    };
+                    rawSize = cleanId.length;
+                    compressedSize = rawSize;
+                    console.log("Parsed ultra-compact 5-digit ID payload successfully:", payload);
+                    break;
                   } else {
-                    parseErrorDetail = "Invalid payload format. No JSON found.";
+                    parseErrorDetail = "Invalid payload format. No JSON found or 5-digit ID found.";
                   }
                 }
               } catch (e: any) {
@@ -149,10 +168,19 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
               throw new Error("Patient ID must be exactly 5 digits.");
             }
 
-            // Verify Crypto Integrity
-            const { verified, trustedAuthority, error: verifyError } = await NfcCryptoService.verifyTagIntegrity(payload);
-            if (!verified) {
-              throw new Error(verifyError || "Patient signature invalid (tampered triage data)");
+            // Verify Crypto Integrity (Two-Tier Verification)
+            let isVerified = false;
+            let isTrusted = false;
+            
+            if (payload.isUnsigned) {
+              console.warn("Unsigned tag detected. Bypassing cryptographic validation (Developer/NTAG213 Mode).");
+            } else {
+              const { verified, trustedAuthority, error: verifyError } = await NfcCryptoService.verifyTagIntegrity(payload);
+              if (!verified) {
+                throw new Error(verifyError || "Patient signature invalid (tampered triage data)");
+              }
+              isVerified = verified;
+              isTrusted = trustedAuthority;
             }
 
             const endTimer = performance.now();

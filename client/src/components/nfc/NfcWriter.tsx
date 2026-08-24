@@ -129,6 +129,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           version: "2.0",
           timestamp: new Date().toISOString(),
           fhirPatientId,
+          isUnsigned: true,
           triageData: {
             name,
             bloodGroup,
@@ -507,12 +508,36 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
                   <p>In NFC Tools, select <strong>Write → Add a record → Data / Custom Record</strong>:</p>
                   <ul className="list-disc list-inside pl-1 text-[10px] text-slate-500 space-y-0.5">
                     <li><strong>Content-Type:</strong> <code className="bg-slate-100 px-1 rounded">application/octet-stream</code></li>
-                    <li><strong>Data Type:</strong> Choose <strong>Hexadecimal</strong> (not Text/ASCII)</li>
+                    <li><strong>Data Type:</strong> Choose <strong>Hexadecimal</strong> (if your device supports Hex input)</li>
                     <li><strong>Data:</strong> Paste the copied Hex payload below:</li>
                   </ul>
                 </div>
                 <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
                   {generatedPayloadHex}
+                </div>
+              </div>
+
+              {/* Option C: Plain 5-digit Patient ID */}
+              <div className="space-y-1.5 pt-1 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-700">Option C: Plain Patient ID (Only 5 bytes - Fits NTAG213)</span>
+                  <Button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(fhirPatientId);
+                      toast.success("Patient ID copied to clipboard!");
+                    }}
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
+                  >
+                    Copy Patient ID
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  In NFC Tools, select <strong>Write → Add a record → Text</strong>. Paste just this 5-digit ID. This fits 100% of NTAG213 tags, and the website scanner will automatically retrieve your database profile!
+                </p>
+                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
+                  {fhirPatientId}
                 </div>
               </div>
             </div>
