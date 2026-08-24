@@ -33,6 +33,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   ]);
   const [authoritySignature, setAuthoritySignature] = useState("");
   const [generatedPayloadText, setGeneratedPayloadText] = useState("");
+  const [generatedPayloadHex, setGeneratedPayloadHex] = useState("");
 
   // Check if NFC is supported
   useEffect(() => {
@@ -97,6 +98,15 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
     toast.success("NFC Payload copied to clipboard!");
   };
 
+  const handleCopyHex = () => {
+    if (!generatedPayloadHex) {
+      toast.error("Please generate/write the payload first to copy it.");
+      return;
+    }
+    navigator.clipboard.writeText(generatedPayloadHex);
+    toast.success("Hex bytes copied to clipboard!");
+  };
+
   const handleWrite = async () => {
     if (!fhirPatientId.trim()) {
       toast.error("FHIR Patient ID is required");
@@ -144,7 +154,16 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
       
       const compressedBase64 = binaryToBase64(compressedBytes);
       const textRecordValue = `gzip:${compressedBase64}`;
+      
+      const bytesToHex = (bytes: Uint8Array) => {
+        return Array.from(bytes)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      };
+      const compressedHex = bytesToHex(compressedBytes);
+
       setGeneratedPayloadText(textRecordValue);
+      setGeneratedPayloadHex(compressedHex);
 
       if (isNfcSupported) {
         // @ts-ignore
@@ -402,23 +421,61 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           )}
 
           {generatedPayloadText && (
-            <div className="mt-4 p-4 border rounded-lg bg-blue-50/50 border-blue-100 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-blue-800">📋 Manual Write Workaround</span>
-                <Button 
-                  onClick={handleCopyPayload}
-                  variant="outline" 
-                  size="sm"
-                  className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-xs h-8"
-                >
-                  Copy NDEF String
-                </Button>
+            <div className="mt-4 p-4 border rounded-lg bg-blue-50/50 border-blue-100 space-y-4">
+              <div className="border-b pb-2">
+                <span className="text-sm font-bold text-blue-900 flex items-center gap-1.5">
+                  📋 NFC Tools Write Options (Manual Workaround)
+                </span>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Use these values in third-party apps like <strong>NFC Tools</strong> if your mobile browser throws write conflicts.
+                </p>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                If the browser throws a connection/IO error on your phone, copy the NDEF string above, open <strong>NFC Tools</strong> on your phone, go to <strong>Write</strong> → <strong>Add a record</strong> → <strong>Text</strong>, paste it, and write it to your tag. The LifeTag scanner will read and decompress it perfectly!
-              </p>
-              <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
-                {generatedPayloadText}
+
+              {/* Option 1: Standard Text Record */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-700">Option A: Text Record (Easiest)</span>
+                  <Button 
+                    onClick={handleCopyPayload}
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
+                  >
+                    Copy Text Payload
+                  </Button>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  In NFC Tools, select <strong>Write → Add a record → Text</strong>. Paste this string:
+                </p>
+                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
+                  {generatedPayloadText}
+                </div>
+              </div>
+
+              {/* Option 2: Custom MIME Record */}
+              <div className="space-y-1.5 pt-1 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-700">Option B: Custom MIME Record</span>
+                  <Button 
+                    onClick={handleCopyHex}
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
+                  >
+                    Copy Hex Bytes
+                  </Button>
+                </div>
+                <div className="text-[11px] text-slate-600 space-y-1">
+                  <p>In NFC Tools, select <strong>Write → Add a record → Data / Custom Record</strong>:</p>
+                  <ul className="list-disc list-inside pl-1 text-[10px] text-slate-500 space-y-0.5">
+                    <li><strong>Content-Type:</strong> <code className="bg-slate-100 px-1 rounded">application/octet-stream</code></li>
+                    <li><strong>Data Type:</strong> Choose <strong>Hexadecimal</strong> (not Text/ASCII)</li>
+                    <li><strong>Data:</strong> Paste the copied Hex payload below:</li>
+                  </ul>
+                </div>
+                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
+                  {generatedPayloadHex}
+                </div>
               </div>
             </div>
           )}
