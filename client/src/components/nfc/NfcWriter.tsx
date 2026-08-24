@@ -179,7 +179,9 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
       if (error.name === 'NotAllowedError') {
         errorMessage = "NFC permission denied. Please allow NFC access.";
       } else if (error.name === 'NotSupportedError') {
-        errorMessage = "NFC is not supported on this device.";
+        errorMessage = "NFC is not supported on this device or tag configuration.";
+      } else if (error.name === 'NetworkError') {
+        errorMessage = "NFC connection lost/IO Error. Please hold the tag steady against the back of the device for 2-3 seconds.";
       }
       onWriteError(errorMessage);
       toast.error(`Write failed: ${errorMessage}`);
