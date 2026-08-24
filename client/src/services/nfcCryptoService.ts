@@ -244,7 +244,8 @@ export class NfcCryptoService {
    * Compresses payload to Gzip binary layout using browser native CompressionStream
    */
   static async compressPayload(payload: NfcTagPayload): Promise<Uint8Array> {
-    const jsonString = JSON.stringify(payload);
+    const shortPayload = this.toShortFormat(payload);
+    const jsonString = JSON.stringify(shortPayload);
     const stream = new Response(jsonString).body?.pipeThrough(new CompressionStream("gzip"));
     if (!stream) throw new Error("CompressionStream not supported");
     const compressedBuffer = await new Response(stream).arrayBuffer();
@@ -259,7 +260,101 @@ export class NfcCryptoService {
     if (!stream) throw new Error("DecompressionStream not supported");
     const decompressedBuffer = await new Response(stream).arrayBuffer();
     const jsonString = new TextDecoder().decode(decompressedBuffer);
-    return JSON.parse(jsonString) as NfcTagPayload;
+    const shortPayload = JSON.parse(jsonString);
+    return this.fromShortFormat(shortPayload);
+  }
+
+  /**
+   * Converts full NfcTagPayload to ultra-compact shortened key JSON format
+   */
+  static toShortFormat(payload: NfcTagPayload): any {
+    let kStr = payload.tagId;
+    try {
+      const jwk = JSON.parse(payload.tagId);
+      if (jwk.x && jwk.y) {
+        kStr = `${jwk.x}.${jwk.y}`;
+      }
+    } catch (e) {}
+
+    const tNum = Math.floor(new Date(payload.timestamp).getTime() / 1000);
+
+    const bgMap: Record<string, string> = {
+      "O-Negative": "O-", "O-Positive": "O+",
+      "A-Negative": "A-", "A-Positive": "A+",
+      "B-Negative": "B-", "B-Positive": "B+",
+      "AB-Negative": "AB-", "AB-Positive": "AB+"
+    };
+    const shortBg = bgMap[payload.triageData.bloodGroup] || payload.triageData.bloodGroup;
+
+    const cleanAllergies = payload.triageData.allergies.filter(
+      a => a.toLowerCase() !== "none" && a.toLowerCase() !== "no allergies"
+    );
+
+    return {
+      v: payload.version,
+      t: tNum,
+      id: payload.fhirPatientId,
+      d: {
+        n: payload.triageData.name,
+        b: shortBg,
+        a: cleanAllergies,
+        c: payload.triageData.emergencyContacts.map(c => ({
+          u: c.userId,
+          n: c.name
+        })),
+        dnr: payload.triageData.dnrStatus
+      },
+      k: kStr,
+      s: payload.signature,
+      as: payload.authoritySignature
+    };
+  }
+
+  /**
+   * Restores shortened key JSON format back to full NfcTagPayload
+   */
+  static fromShortFormat(short: any): NfcTagPayload {
+    let tagId = short.k;
+    if (short.k && short.k.includes('.')) {
+      const [x, y] = short.k.split('.');
+      tagId = JSON.stringify({
+        kty: "EC",
+        crv: "P-256",
+        x,
+        y
+      });
+    }
+
+    const timestamp = short.t ? new Date(short.t * 1000).toISOString() : new Date().toISOString();
+
+    const bgMapInv: Record<string, string> = {
+      "O-": "O-Negative", "O+": "O-Positive",
+      "A-": "A-Negative", "A+": "A-Positive",
+      "B-": "B-Negative", "B+": "B-Positive",
+      "AB-": "AB-Negative", "AB+": "AB-Positive"
+    };
+    const fullBg = bgMapInv[short.d.b] || short.d.b;
+
+    const allergies = short.d.a.length === 0 ? ["None"] : short.d.a;
+
+    return {
+      version: short.v,
+      timestamp,
+      fhirPatientId: short.id,
+      triageData: {
+        name: short.d.n,
+        bloodGroup: fullBg,
+        allergies,
+        emergencyContacts: (short.d.c || []).map((c: any) => ({
+          userId: c.u,
+          name: c.n
+        })),
+        dnrStatus: short.d.dnr
+      },
+      tagId,
+      signature: short.s,
+      authoritySignature: short.as
+    };
   }
 
   /**
