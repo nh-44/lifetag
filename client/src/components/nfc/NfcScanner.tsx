@@ -78,6 +78,8 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
                   compressedSize = rawSize; // No compression on legacy text
                   console.log("Parsed legacy text JSON payload successfully:", payload);
                   break;
+                } else {
+                  parseErrorDetail = "Invalid payload format. No JSON found.";
                 }
               } catch (e: any) {
                 console.error("Error decoding text record:", e);

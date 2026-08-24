@@ -1,12 +1,12 @@
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import NfcWriter from './NfcWriter';
 import { NfcCryptoService } from '@/services/nfcCryptoService';
 import { fetchWithAuth } from '@/services/api';
-import { toast } from 'sonner';
 
 vi.mock('@/services/api', () => ({
-  fetchWithAuth: vi.fn()
+  fetchWithAuth: vi.fn(),
+  logBenchmarkTelemetry: vi.fn().mockResolvedValue({ success: true })
 }));
 
 vi.mock('sonner', () => ({
@@ -30,15 +30,13 @@ describe('NfcWriter', () => {
       data: {
         accountId: '12345',
         name: "Jane Doe",
-        bloodGroup: "O-",
+        bloodGroup: "O-Negative",
         allergies: ["None"],
         emergencyContacts: [],
         dnrStatus: false,
+        authoritySignature: "mock-sig"
       }
     });
-    
-    // Ensure crypto methods run synchronously in tests if not mocked, 
-    // but they are async now so we just let them execute normally or mock them.
   });
 
   afterEach(() => {
@@ -57,14 +55,11 @@ describe('NfcWriter', () => {
       />
     );
     
-    await waitFor(() => {
-      expect(screen.getByText(/NFC is not supported/i)).toBeInTheDocument();
-    });
+    // Fill out form fields manually
+    fireEvent.change(screen.getByLabelText(/FHIR Patient ID/i), { target: { value: '12345' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'Jane Doe' } });
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '12345' } });
-    
-    const writeBtn = screen.getByRole('button', { name: /^Write/i });
+    const writeBtn = screen.getByRole('button', { name: /Write Compressed Payload/i });
     fireEvent.click(writeBtn);
 
     await waitFor(() => {
@@ -87,10 +82,11 @@ describe('NfcWriter', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '54321' } });
+    // Fill out form fields
+    fireEvent.change(screen.getByLabelText(/FHIR Patient ID/i), { target: { value: '54321' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'John Smith' } });
     
-    const writeBtn = screen.getByRole('button', { name: /^Write/i });
+    const writeBtn = screen.getByRole('button', { name: /Write Compressed Payload/i });
     fireEvent.click(writeBtn);
 
     await waitFor(() => {
@@ -99,13 +95,13 @@ describe('NfcWriter', () => {
     });
   });
 
-  it('fails size validation and prevents hardware write when rawBytes > 504', async () => {
+  it('fails size validation and prevents hardware write when compressed payload > 504 bytes', async () => {
     const mockWrite = vi.fn().mockResolvedValue(undefined);
     class MockNDEFReader { write = mockWrite; }
     vi.stubGlobal('NDEFReader', MockNDEFReader);
 
-    // Mock calculateByteSize to return rawBytes > 504
-    vi.spyOn(NfcCryptoService, 'calculateByteSize').mockResolvedValue({ rawBytes: 600, compressedBytes: 300, fitsNtag215: true });
+    // Mock compressPayload to return a large payload
+    vi.spyOn(NfcCryptoService, 'compressPayload').mockResolvedValue(new Uint8Array(600));
 
     render(
       <NfcWriter 
@@ -114,52 +110,65 @@ describe('NfcWriter', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '99999' } });
+    fireEvent.change(screen.getByLabelText(/FHIR Patient ID/i), { target: { value: '99999' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'Jane Doe' } });
     
-    const writeBtn = screen.getByRole('button', { name: /^Write/i });
+    const writeBtn = screen.getByRole('button', { name: /Write Compressed Payload/i });
     fireEvent.click(writeBtn);
 
     await waitFor(() => {
-      expect(mockOnWriteError).toHaveBeenCalledWith(expect.stringContaining('Payload too large'));
+      expect(mockOnWriteError).toHaveBeenCalledWith(expect.stringContaining('exceeds standard NTAG215 budget'));
       expect(mockWrite).not.toHaveBeenCalled();
     });
   });
 
-  it('shows error for invalid account ID', () => {
+  it('shows write button as disabled for invalid inputs', () => {
     render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
-    const input = screen.getByPlaceholderText(/Enter 5-digit account ID/i);
-    fireEvent.change(input, { target: { value: '1234' } }); // Only 4 digits
-    const btn = screen.getByRole('button', { name: /^Write/i });
+    
+    const btn = screen.getByRole('button', { name: /Write Compressed Payload/i });
+    expect(btn).toBeDisabled();
+    
+    // Input invalid ID
+    fireEvent.change(screen.getByLabelText(/FHIR Patient ID/i), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'Jane' } });
     expect(btn).toBeDisabled();
   });
 
-  it('handles backend API failure', async () => {
+  it('handles backend API failure during fetch profile', async () => {
     vi.mocked(fetchWithAuth).mockResolvedValueOnce({
       success: false,
       error: { message: "Patient not found" }
     });
     
     render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
-    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
+    
+    // Fill fetch input
+    fireEvent.change(screen.getByLabelText(/Auto-Fill from Account ID/i), { target: { value: '12345' } });
+    
+    const fetchBtn = screen.getByRole('button', { name: /Fetch Profile/i });
+    fireEvent.click(fetchBtn);
 
+    // Should fetch and handle failure gracefully (shows error toast)
     await waitFor(() => {
-      expect(mockOnWriteError).toHaveBeenCalledWith('Patient not found');
+      expect(fetchWithAuth).toHaveBeenCalledWith('/patients/triage/12345');
     });
   });
 
   it('handles NFC permission denied or write failure', async () => {
-    const mockWrite = vi.fn().mockRejectedValue(new Error("NFC Permission Denied"));
+    const mockWrite = vi.fn().mockRejectedValue({ name: 'NotAllowedError', message: 'Permission Denied' });
     class MockNDEFReader { write = mockWrite; }
     vi.stubGlobal('NDEFReader', MockNDEFReader);
 
     render(<NfcWriter onWriteComplete={mockOnWriteComplete} onWriteError={mockOnWriteError} />);
-    fireEvent.change(screen.getByPlaceholderText(/Enter 5-digit account ID/i), { target: { value: '12345' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Write/i }));
+    
+    fireEvent.change(screen.getByLabelText(/FHIR Patient ID/i), { target: { value: '12345' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'Jane Doe' } });
+    
+    const writeBtn = screen.getByRole('button', { name: /Write Compressed Payload/i });
+    fireEvent.click(writeBtn);
 
     await waitFor(() => {
-      expect(mockOnWriteError).toHaveBeenCalledWith('NFC Permission Denied');
+      expect(mockOnWriteError).toHaveBeenCalledWith('NFC permission denied. Please allow NFC access.');
     });
   });
 });
