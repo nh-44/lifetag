@@ -149,18 +149,18 @@ export async function seedFirstResponder(overrides?: {
   return { responder, plainPassword };
 }
 
-/** Seeds a ScanAuditLog row with a controllable timestamp */
 export async function seedScanAuditLog(data: {
   scannedBy: string;
   patientAccount: string;
   timestamp?: Date;
+  deviceMeta?: string;
 }) {
   return testPrisma.scanAuditLog.create({
     data: {
       scannedBy: data.scannedBy,
       patientAccount: data.patientAccount,
       timestamp: data.timestamp ?? new Date(),
-      deviceMeta: 'test-device',
+      deviceMeta: data.deviceMeta ?? 'test-device [Authority-Certified]',
     },
   });
 }

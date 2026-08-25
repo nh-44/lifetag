@@ -18,6 +18,13 @@ export const scanController = {
         throw { statusCode: 400, message: 'Invalid tag signature. Cryptographic verification failed.' };
       }
 
+      // Verify payload timestamp freshness (within 48 hours)
+      const payloadTime = new Date(tagPayload.timestamp).getTime();
+      const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+      if (!tagPayload.timestamp || isNaN(payloadTime) || payloadTime < fortyEightHoursAgo) {
+        throw { statusCode: 400, message: 'Tag payload timestamp has expired (stale replay attack detected).' };
+      }
+
       let finalDeviceMeta = deviceMeta || '';
       if (trustedAuthority) {
         finalDeviceMeta += ' [Authority-Certified]';

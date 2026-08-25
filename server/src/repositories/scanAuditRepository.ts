@@ -20,7 +20,8 @@ export const scanAuditRepository = {
       where: {
         scannedBy,
         patientAccount,
-        timestamp: { gte: cutoff }
+        timestamp: { gte: cutoff },
+        deviceMeta: { contains: '[Authority-Certified]' }
       }
     });
     return !!log;
