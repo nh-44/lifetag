@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../../app';
-import { cleanDb, seedUser, seedDoctor, seedFirstResponder, testPrisma } from '../helpers/testDb';
+import { cleanDb, seedUser, seedDoctor } from '../helpers/testDb';
 import { makeToken, makeAuthHeader } from '../helpers/authHelpers';
 import { Role } from '../../constants/roles';
 import { beforeEach } from 'vitest';
@@ -195,7 +195,7 @@ describe('Crypto Adversarial: Stale payload replay', () => {
   it('rejects a valid payload that is older than the staleness threshold (48h)', async () => {
     const crypto = await import('crypto');
     const { user: patient } = await seedUser({ userId: 'US99001', accountId: '99001' });
-    const { user: firstResponder } = await seedFirstResponder({ userId: 'FR99001', accountId: '99002' });
+    // No first responder database entry needed as token authentication resolves directly from JWT payload
     const frToken = makeToken('FR99001', Role.FIRST_RESPONDER);
 
     const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -246,7 +246,7 @@ describe('Crypto Adversarial: Trust-downgrade enforcement', () => {
   it('blocks access to medical records if the scan was performed with a self-signed (uncertified) tag', async () => {
     const crypto = await import('crypto');
     const { user: patient } = await seedUser({ userId: 'US99003', accountId: '99003' });
-    const { user: doctor } = await seedDoctor({ userId: 'DR99003', accountId: '99004' });
+    await seedDoctor({ userId: 'DR99003', accountId: '99004' });
     const drToken = makeToken('DR99003', Role.DOCTOR);
 
     const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });

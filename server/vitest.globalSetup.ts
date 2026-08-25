@@ -14,7 +14,7 @@ export async function setup() {
   // Direct assignment takes priority — ensures the test DB is used even if
   // src/config/env.ts re-runs dotenv.config({ path: '.env' }) later
   process.env.NODE_ENV = 'test';
-  process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public';
+  process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public';
   process.env.JWT_SECRET = 'lifetag_test_jwt_secret_do_not_use_in_production';
   process.env.CORS_ORIGIN = 'http://localhost:5173';
   process.env.PORT = '9001';

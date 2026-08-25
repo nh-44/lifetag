@@ -11,7 +11,6 @@ import {
   cleanDb,
   seedUser,
   seedDoctor,
-  seedFirstResponder,
   seedScanAuditLog,
   testPrisma,
 } from '../helpers/testDb';

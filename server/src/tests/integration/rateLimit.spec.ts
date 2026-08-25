@@ -6,7 +6,7 @@
  * within a process. To isolate tests we use a fresh app instance per describe
  * block and rely on a custom Express app that re-creates the limiters.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
