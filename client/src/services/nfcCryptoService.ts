@@ -274,7 +274,9 @@ export class NfcCryptoService {
       if (jwk.x && jwk.y) {
         kStr = `${jwk.x}.${jwk.y}`;
       }
-    } catch (e) {}
+    } catch (e) {
+      // Not a valid JSON JWK, keep string key as-is
+    }
 
     const tNum = Math.floor(new Date(payload.timestamp).getTime() / 1000);
 

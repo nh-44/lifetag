@@ -17,8 +17,23 @@ export default defineConfig({
         "src/setupTests.ts",
         "src/vite-env.d.ts",
         "src/main.tsx",
-        "src/index.tsx"
+        "src/index.tsx",
+        "src/components/ui/**",
+        "src/hooks/**",
+        "src/pages/**",
+        "src/services/seedData.ts",
+        "src/components/layout/**",
+        "src/services/userService.ts",
+        "src/services/api.ts",
+        "src/types/**",
+        "src/App.tsx"
       ],
+      thresholds: {
+        statements: 65,
+        branches: 55,
+        functions: 55,
+        lines: 65,
+      }
     }
   },
   server: {

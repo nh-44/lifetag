@@ -14,6 +14,8 @@ import { cleanDb, seedUser, seedDoctor, seedFirstResponder, testPrisma } from '.
 import { makeToken, makeAuthHeader } from '../helpers/authHelpers';
 import { Role } from '../../constants/roles';
 import { beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 beforeEach(async () => {
   await cleanDb();
@@ -94,9 +96,6 @@ describe('Rate-limit mounting: authLimiter is mounted on /auth/login and /auth/s
      * This test performs static analysis on the route file to confirm
      * authLimiter is wired into the route declarations, not just imported.
      */
-    const fs = require('fs');
-    const path = require('path');
-
     const routeFilePath = path.resolve(process.cwd(), 'src/routes/v1/auth.routes.ts');
     const source = fs.readFileSync(routeFilePath, 'utf-8') as string;
 
@@ -115,9 +114,6 @@ describe('Rate-limit mounting: authLimiter is mounted on /auth/login and /auth/s
   });
 
   it('app.ts mounts apiLimiter on /api/v1 (not just defined)', () => {
-    const fs = require('fs');
-    const path = require('path');
-
     const appFilePath = path.resolve(process.cwd(), 'src/app.ts');
     const source = fs.readFileSync(appFilePath, 'utf-8') as string;
 

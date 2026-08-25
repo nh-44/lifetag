@@ -14,7 +14,9 @@ function toShortFormat(payload: TriagePayload): any {
     if (jwk.x && jwk.y) {
       kStr = `${jwk.x}.${jwk.y}`;
     }
-  } catch (e) {}
+  } catch (e) {
+    // Ignore invalid JSON JWK
+  }
 
   const tNum = Math.floor(new Date(payload.timestamp).getTime() / 1000);
 

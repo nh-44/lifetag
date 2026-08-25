@@ -26,19 +26,39 @@ jobs:
         cd client
         npm install
 
+    - name: Run Client Linting
+      run: |
+        cd client
+        npm run lint
+
     - name: Verify Client TypeScript and Build
       run: |
         cd client
         npm run build
 
-    - name: Run Client Tests
+    - name: Run Client Tests with Coverage Gate
       run: |
         cd client
-        npm run test -- --run
+        npx vitest run --coverage
 
   build-server:
     name: Build Express Server
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lifetag_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v4
@@ -55,12 +75,27 @@ jobs:
         cd server
         npm install
 
+    - name: Run Server Linting
+      run: |
+        cd server
+        npm run lint
+
     - name: Verify Server TypeScript and Build
       run: |
         cd server
         npm run build
 
-    - name: Run Server Security Tests
+    - name: Run Prisma DB Push
       run: |
         cd server
-        npm run test:security
+        npx prisma db push
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lifetag_test?schema=public
+
+    - name: Run Server Tests
+      run: |
+        cd server
+        npm run test
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lifetag_test?schema=public
+
