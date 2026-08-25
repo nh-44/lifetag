@@ -28,7 +28,7 @@ import { Role } from '../../constants/roles';
 import { vi } from 'vitest';
 vi.mock('../../services/nfc.service', () => ({
   NfcService: {
-    verifyTagIntegrity: vi.fn(() => ({ verified: true, trustedAuthority: false })),
+    verifyTagIntegrity: vi.fn(() => ({ verified: true, trustedAuthority: true })),
   },
 }));
 
