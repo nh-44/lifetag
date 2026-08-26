@@ -7,7 +7,7 @@ import { NfcService, TriagePayload } from '../services/nfc.service';
 /**
  * Minifies the payload to perfectly mirror the production WebNFC client output.
  */
-function toShortFormat(payload: TriagePayload): any {
+function toShortFormat(payload: TriagePayload): Record<string, unknown> {
   let kStr = payload.tagId;
   try {
     const jwk = JSON.parse(payload.tagId);
@@ -41,7 +41,7 @@ function toShortFormat(payload: TriagePayload): any {
       n: payload.triageData.name,
       b: shortBg,
       a: cleanAllergies,
-      c: payload.triageData.emergencyContacts.map((c: any) => ({
+      c: payload.triageData.emergencyContacts.map((c: { userId: string; name: string }) => ({
         u: c.userId,
         n: c.name
       })),
@@ -330,9 +330,6 @@ export function runBenchmark(iterations: number = 100) {
   console.log(`Tamper Detection Rate: ${detectionRate.toFixed(2)}%`);
   console.log(`======================================================================\n`);
 }
-
-// Fix decap parameter mapping cleanly
-const getPercentileWrapper = (arr: number[], pct: number) => getPercentile(arr, pct);
 
 if (require.main === module) {
   runBenchmark();

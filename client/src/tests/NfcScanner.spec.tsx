@@ -1,6 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import NfcScanner from './NfcScanner';
+import NfcScanner from '@/components/nfc/NfcScanner';
 import { NfcCryptoService } from '@/services/nfcCryptoService';
 
 describe('NfcScanner', () => {

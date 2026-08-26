@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import AuthGuard from './AuthGuard';
+import AuthGuard from '@/components/auth/AuthGuard';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Mock context hook
@@ -77,7 +77,7 @@ describe('AuthGuard', () => {
           <Route
             path="/protected"
             element={
-              <AuthGuard allowedRoles={['DOCTOR']}>
+              <AuthGuard allowedRoles={['DOCTOR'] as any}>
                 <div>Doctor Only Content</div>
               </AuthGuard>
             }
@@ -104,7 +104,7 @@ describe('AuthGuard', () => {
           <Route
             path="/protected"
             element={
-              <AuthGuard allowedRoles={['DOCTOR']}>
+              <AuthGuard allowedRoles={['DOCTOR'] as any}>
                 <div>Doctor Only Content</div>
               </AuthGuard>
             }

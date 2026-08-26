@@ -45,33 +45,33 @@ We split patient records into public triage details and protected medical histor
 ## 📂 Key Files Directory
 
 ### 💻 Client Directory (`client/`)
-- [package.json](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/package.json): Frontend dependencies (Tailwind, Lucide React, Radix UI primitives, Sonner, React Query, React Router DOM).
-- [src/main.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/main.tsx): Client entrypoint mounting the React DOM.
-- [src/App.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/App.tsx): Main router definition, including theme/query/auth context wrappers.
-- [src/vite-env.d.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/vite-env.d.ts): Ambient TypeScript overrides for the browser native `NDEFReader` / Web NFC API.
+- [package.json](../client/package.json): Frontend dependencies (Tailwind, Lucide React, Radix UI primitives, Sonner, React Query, React Router DOM).
+- [src/main.tsx](../client/src/main.tsx): Client entrypoint mounting the React DOM.
+- [src/App.tsx](../client/src/App.tsx): Main router definition, including theme/query/auth context wrappers.
+- [src/vite-env.d.ts](../client/src/vite-env.d.ts): Ambient TypeScript overrides for the browser native `NDEFReader` / Web NFC API.
 - **Components**:
-  - [src/components/auth/AuthGuard.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/components/auth/AuthGuard.tsx): Guard component handling role-based client-side route protection.
-  - [src/components/nfc/NfcScanner.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/components/nfc/NfcScanner.tsx): Handles starting `NDEFReader`, parsing Text records, extracting 5-digit account IDs, and firing the scan success handler.
-  - [src/components/nfc/NfcWriter.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/components/nfc/NfcWriter.tsx): Programs passive NTAG chips with text payload containing patient IDs.
+  - [src/components/auth/AuthGuard.tsx](../client/src/components/auth/AuthGuard.tsx): Guard component handling role-based client-side route protection.
+  - [src/components/nfc/NfcScanner.tsx](../client/src/components/nfc/NfcScanner.tsx): Handles starting `NDEFReader`, parsing Text records, extracting 5-digit account IDs, and firing the scan success handler.
+  - [src/components/nfc/NfcWriter.tsx](../client/src/components/nfc/NfcWriter.tsx): Programs passive NTAG chips with text payload containing patient IDs.
 - **Pages**:
-  - [src/pages/TagTracer.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/pages/TagTracer.tsx): NFC Hardware Console for scanning, writing, and displaying scan audits.
-  - [src/pages/EmergencyInfo.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/pages/EmergencyInfo.tsx): Rendered view of public triage details for first responders.
-  - [src/pages/MedicalInfo.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/pages/MedicalInfo.tsx): Doctor's dashboard for detailed medical history.
+  - [src/pages/TagTracer.tsx](../client/src/pages/TagTracer.tsx): NFC Hardware Console for scanning, writing, and displaying scan audits.
+  - [src/pages/EmergencyInfo.tsx](../client/src/pages/EmergencyInfo.tsx): Rendered view of public triage details for first responders.
+  - [src/pages/MedicalInfo.tsx](../client/src/pages/MedicalInfo.tsx): Doctor's dashboard for detailed medical history.
 - **Services**:
-  - [src/services/api.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/services/api.ts): Configures base API requests adding bearer authorization tokens.
-  - [src/services/userService.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/services/userService.ts): Maps UI endpoints to REST service functions.
-  - [src/services/nfcCryptoService.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/services/nfcCryptoService.ts): Validates byte-size thresholds (< 504 bytes) for NTAG215 constraints.
+  - [src/services/api.ts](../client/src/services/api.ts): Configures base API requests adding bearer authorization tokens.
+  - [src/services/userService.ts](../client/src/services/userService.ts): Maps UI endpoints to REST service functions.
+  - [src/services/nfcCryptoService.ts](../client/src/services/nfcCryptoService.ts): Validates byte-size thresholds (< 504 bytes) for NTAG215 constraints.
 
 ### 🔌 Server Directory (`server/`)
-- [src/app.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/app.ts): Express configuration containing middleware setups and CORS.
-- [src/server.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/server.ts): Starts the HTTP listener.
-- [src/config/database.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/config/database.ts): Instantiates the singleton `PrismaClient` for database queries.
+- [src/app.ts](../server/src/app.ts): Express configuration containing middleware setups and CORS.
+- [src/server.ts](../server/src/server.ts): Starts the HTTP listener.
+- [src/config/database.ts](../server/src/config/database.ts): Instantiates the singleton `PrismaClient` for database queries.
 - **Routes & Controllers**:
-  - [src/routes/v1/patient.routes.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/routes/v1/patient.routes.ts): Maps patient routes with RBAC middlewares.
-  - [src/controllers/patient.controller.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/controllers/patient.controller.ts): Handles requests, calling patient services and returning standardized responses.
+  - [src/routes/v1/patient.routes.ts](../server/src/routes/v1/patient.routes.ts): Maps patient routes with RBAC middlewares.
+  - [src/controllers/patient.controller.ts](../server/src/controllers/patient.controller.ts): Handles requests, calling patient services and returning standardized responses.
 - **Middlewares**:
-  - [src/middlewares/auth.middleware.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/middlewares/auth.middleware.ts): Verifies JWT headers and attaches the authorized user payload to `req.user`.
-  - [src/middlewares/rbac.middleware.ts](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/server/src/middlewares/rbac.middleware.ts): Restricts endpoint access to specific roles (`USER`, `DOCTOR`, `FIRST_RESPONDER`).
+  - [src/middlewares/auth.middleware.ts](../server/src/middlewares/auth.middleware.ts): Verifies JWT headers and attaches the authorized user payload to `req.user`.
+  - [src/middlewares/rbac.middleware.ts](../server/src/middlewares/rbac.middleware.ts): Restricts endpoint access to specific roles (`USER`, `DOCTOR`, `FIRST_RESPONDER`).
 
 ---
 

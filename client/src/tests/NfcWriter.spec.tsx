@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import NfcWriter from './NfcWriter';
+import NfcWriter from '@/components/nfc/NfcWriter';
 import { NfcCryptoService } from '@/services/nfcCryptoService';
 import { fetchWithAuth } from '@/services/api';
 

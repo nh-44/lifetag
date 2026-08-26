@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import AdminPanel from './AdminPanel';
+import AdminPanel from '@/components/nfc/AdminPanel';
 
 // Mock the Dialog components from Radix UI and NfcWriter
 vi.mock('@/components/ui/dialog', () => ({
@@ -15,7 +15,7 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: any) => <div data-testid="dialog-title">{children}</div>,
 }));
 
-vi.mock('./NfcWriter', () => ({
+vi.mock('@/components/nfc/NfcWriter', () => ({
   default: ({ onWriteComplete }: any) => (
     <div data-testid="mock-nfc-writer">
       <button onClick={() => onWriteComplete('12345')}>Mock Write</button>

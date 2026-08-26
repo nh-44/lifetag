@@ -9,9 +9,9 @@ export class CryptoUtils {
    * Verifies an ECDSA P-256 signature against stringified triage data
    */
   static verifyEcdsaSignature(
-    triageData: any,
+    triageData: unknown,
     signatureBase64: string,
-    publicKeyJwk: any
+    publicKeyJwk: object
   ): boolean {
     try {
       // Import public key from JWK object
@@ -52,7 +52,7 @@ export class CryptoUtils {
   /**
    * Encapsulates a shared secret using the Kyber public key
    */
-  static encapsulateSharedSecret(kyberPublicKey: string): {
+  static encapsulateSharedSecret(_kyberPublicKey: string): {
     ciphertext: string;
     sharedSecret: string;
   } {

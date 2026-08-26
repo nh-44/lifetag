@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import TagTracer from './TagTracer';
+import TagTracer from '@/pages/TagTracer';
 import { toast } from 'sonner';
 
 // Mock child components

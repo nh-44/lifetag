@@ -1,7 +1,7 @@
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { useEffect } from 'react';
-import { AuthProvider, useAuth } from './AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { authenticateUser, registerUser, checkUserIdAvailability } from '@/services/userService';
 import { tokenStorage } from '@/utils/tokenStorage';
 

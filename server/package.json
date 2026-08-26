@@ -20,7 +20,7 @@
     "test:security": "vitest run src/tests/unit/crypto.utils.spec.ts src/tests/unit/nfc.service.spec.ts",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
-    "db:test:setup": "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public\" prisma db push"
+    "db:test:setup": "cross-env DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public\" prisma db push"
   },
   "keywords": [
     "lifetag",
@@ -48,7 +48,6 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
-    "prisma": "^5.22.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -56,7 +55,9 @@
     "@typescript-eslint/eslint-plugin": "^7.15.0",
     "@typescript-eslint/parser": "^7.15.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "cross-env": "^10.1.0",
     "eslint": "^8.57.0",
+    "prisma": "^5.22.0",
     "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.11",

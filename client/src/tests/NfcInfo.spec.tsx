@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import NfcInfo from './NfcInfo';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import NfcInfo from '@/components/nfc/NfcInfo';
 
 import { toast } from 'sonner';
 
@@ -37,7 +37,7 @@ describe('NfcInfo', () => {
   });
 
   it('Open Profile navigation passes the raw tagPayload through React Router state correctly', () => {
-    const mockPayload = { fhirPatientId: '12345', version: '2.0', timestamp: 'xyz', triageData: {} as any, tagId: 'abc', signature: 'xyz' };
+    const mockPayload = { fhirPatientId: '12345', version: '2.0' as const, timestamp: 'xyz', triageData: {} as any, tagId: 'abc', signature: 'xyz' };
     render(<NfcInfo accountId="12345" url="http://localhost:8080/emergency-info/12345" payload={mockPayload} />);
     
     const openUrlBtn = screen.getByTitle('Open URL');

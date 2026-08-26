@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import ScanHistory from './ScanHistory';
+import ScanHistory from '@/components/nfc/ScanHistory';
 
 describe('ScanHistory', () => {
   beforeEach(() => {

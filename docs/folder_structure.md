@@ -69,6 +69,17 @@ client/
     │   ├── nfcCryptoService.ts         # Cryptographic payload signing and NTAG size checker
     │   ├── seedData.ts                 # Offline seed data populator
     │   └── userService.ts              # Main data access repository and profile management
+    ├── tests/                          # Consolidated frontend unit/component tests
+    │   ├── AdminPanel.spec.tsx
+    │   ├── App.spec.tsx
+    │   ├── AuthContext.spec.tsx
+    │   ├── AuthGuard.spec.tsx
+    │   ├── NfcInfo.spec.tsx
+    │   ├── NfcScanner.spec.tsx
+    │   ├── NfcWriter.spec.tsx
+    │   ├── ScanHistory.spec.tsx
+    │   ├── TagTracer.spec.tsx
+    │   └── tokenStorage.spec.ts
     └── types/
         ├── index.ts                    # TypeScript models, unions, and payload interfaces
         └── user.ts                     # Re-export gateway for user domain models
@@ -132,6 +143,11 @@ server/
 │   │       ├── triage.routes.ts                        # Triage lookup endpoints (FIRST_RESPONDER guard)
 │   │       ├── medical.routes.ts                       # Deep medical endpoints (DOCTOR guard)
 │   │       └── nfc.routes.ts                           # NFC hardware toolkit endpoints
+│   ├── tests/                                          # Test Suites
+│   │   ├── helpers/                                    # Test DB seed & clean utilities
+│   │   ├── integration/                                # API route integration tests
+│   │   ├── security/                                   # Threat model & adversarial tests
+│   │   └── unit/                                       # Component & middleware unit tests
 │   ├── app.ts                                          # Express app setup
 │   └── server.ts                                       # HTTP server listener entrypoint
 ├── .env.example                                        # Environment variable template

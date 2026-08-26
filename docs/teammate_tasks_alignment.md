@@ -38,7 +38,7 @@ The UI must reflect the new trust hierarchy so responders can differentiate betw
 
 ### Required Actions:
 1. **Trust Indicators (Emergency Info View)**:
-   - On [EmergencyInfo.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/pages/EmergencyInfo.tsx), call `NfcCryptoService.verifyTagIntegrity(payload)` on the scanned tag payload.
+   - On [EmergencyInfo.tsx](../client/src/pages/EmergencyInfo.tsx), call `NfcCryptoService.verifyTagIntegrity(payload)` on the scanned tag payload.
    - Display a verified trust badge based on the result:
      - **Green Badge ("Authority Certified")**: Patient signature and authority signature are both verified.
      - **Yellow Badge ("Self-Signed/Unverified Key")**: Patient signature is verified but the authority certificate is missing or invalid.
@@ -54,7 +54,7 @@ The Web NFC scanner and writer must write the new payload keys.
 
 ### Required Actions:
 1. **NFC Tag Writer Payload Updates**:
-   - In [NfcWriter.tsx](file:///e:/Hackathons%20,%20CODMAV%20,%20etc/LifeTag/client/src/components/nfc/NfcWriter.tsx), ensure that when generating the tag data block, the payload includes the `authoritySignature` returned from the patient's profile API.
+   - In [NfcWriter.tsx](../client/src/components/nfc/NfcWriter.tsx), ensure that when generating the tag data block, the payload includes the `authoritySignature` returned from the patient's profile API.
 2. **Offline Mode Verification**:
    - Test scanning tags in offline conditions. Verify that the client is able to successfully execute `verifyTagIntegrity` completely offline using the pre-loaded root authority public key.
 3. **Integration Test Suite**:
