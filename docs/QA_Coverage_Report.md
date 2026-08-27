@@ -22,4 +22,11 @@
 | `TagTracer.tsx` | 89.13% | 88.23% | 81.81% | 88.88% |
 | `NfcScanner.tsx` | 82.95% | 64.81% | 90.00% | 83.90% |
 
+## Server API & Security Coverage (server/src/)
+- **Statements:** 92.87%
+- **Branches:** 83.43%
+- **Functions:** 98.80%
+- **Lines:** 93.65%
 
+**Total Server Tests:** 178 passing (0 failures)
+**Configured Thresholds:** Satisfied (target: >75% Stmt/Line/Func, >70% Branch)

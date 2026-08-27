@@ -15,6 +15,23 @@ beforeEach(async () => {
   await cleanDb();
 });
 
+// ─── Auth Availability Check ────────────────────────────────────────────────────
+
+describe('GET /api/v1/auth/check/:userId', () => {
+  it('returns available: true for an unused ID', async () => {
+    const res = await request(app).get('/api/v1/auth/check/US99999');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ available: true });
+  });
+
+  it('returns available: false for a taken ID', async () => {
+    await seedUser({ userId: 'US99998' });
+    const res = await request(app).get('/api/v1/auth/check/US99998');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ available: false });
+  });
+});
+
 // ─── Signup ───────────────────────────────────────────────────────────────────
 
 describe('POST /api/v1/auth/signup', () => {

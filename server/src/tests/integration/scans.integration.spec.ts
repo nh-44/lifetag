@@ -74,6 +74,44 @@ describe('POST /api/v1/scans', () => {
     expect(res.status).toBe(403);
   });
 
+  it('returns 400 when missing tagPayload.signature', async () => {
+    const { responder } = await seedFirstResponder({ userId: 'FR90001' });
+    const token = makeToken(responder.userId, Role.FIRST_RESPONDER);
+    const { user } = await seedUser({ userId: 'US90001', accountId: '90001' });
+
+    const malformedPayload = { ...MOCK_TAG_PAYLOAD };
+    delete (malformedPayload as any).signature;
+
+    const res = await request(app)
+      .post('/api/v1/scans')
+      .set(makeAuthHeader(token))
+      .send({
+        patientAccount: user.accountId,
+        tagPayload: malformedPayload,
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when missing tagPayload.tagId', async () => {
+    const { responder } = await seedFirstResponder({ userId: 'FR90001' });
+    const token = makeToken(responder.userId, Role.FIRST_RESPONDER);
+    const { user } = await seedUser({ userId: 'US90001', accountId: '90001' });
+
+    const malformedPayload = { ...MOCK_TAG_PAYLOAD };
+    delete (malformedPayload as any).tagId;
+
+    const res = await request(app)
+      .post('/api/v1/scans')
+      .set(makeAuthHeader(token))
+      .send({
+        patientAccount: user.accountId,
+        tagPayload: malformedPayload,
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it('creates an audit row for a valid FR scan and returns 201', async () => {
     const { responder } = await seedFirstResponder({ userId: 'FR90001' });
     const token = makeToken(responder.userId, Role.FIRST_RESPONDER);
@@ -153,5 +191,43 @@ describe('GET /api/v1/scans/history', () => {
     const history = res.body.data;
     expect(history).toHaveLength(2);
     expect(history.every((s: any) => s.scannedBy === fr1.userId)).toBe(true);
+  });
+});
+
+// ─── GET /api/v1/scans/export ─────────────────────────────────────────────────
+
+describe('GET /api/v1/scans/export', () => {
+  it('returns a CSV file with correct headers and formatted rows', async () => {
+    const { responder: fr } = await seedFirstResponder({ userId: 'FR92001' });
+    const token = makeToken(fr.userId, Role.FIRST_RESPONDER);
+
+    await testPrisma.scanAuditLog.create({
+      data: { scannedBy: fr.userId, patientAccount: '00001', timestamp: new Date(), deviceMeta: 'Test Device [Self-Signed]' },
+    });
+
+    const res = await request(app)
+      .get('/api/v1/scans/export')
+      .set(makeAuthHeader(token));
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment; filename="scan-history.csv"');
+    
+    // Check CSV contents
+    const lines = res.text.split('\n');
+    expect(lines[0]).toBe('id,patientAccount,timestamp,deviceMeta');
+    expect(lines[1]).toContain('00001');
+    expect(lines[1]).toContain('Test Device [Self-Signed]');
+  });
+
+  it('returns 404 when no scans exist for the user', async () => {
+    const { responder: fr } = await seedFirstResponder({ userId: 'FR92002' });
+    const token = makeToken(fr.userId, Role.FIRST_RESPONDER);
+
+    const res = await request(app)
+      .get('/api/v1/scans/export')
+      .set(makeAuthHeader(token));
+
+    expect(res.status).toBe(404);
   });
 });

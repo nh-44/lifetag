@@ -288,6 +288,15 @@ describe('Crypto Adversarial: Trust-downgrade enforcement', () => {
 
     // The scan gets logged successfully (201) because the patient signature is technically valid for its own public key
     expect(scanRes.status).toBe(201);
+    
+    // Verify that [Self-Signed] was added to the deviceMeta in the database
+    const { testPrisma } = await import('../helpers/testDb');
+    const logEntry = await testPrisma.scanAuditLog.findFirst({
+      where: { scannedBy: drToken.userId, patientAccount: patient.accountId },
+      orderBy: { timestamp: 'desc' }
+    });
+    expect(logEntry).toBeDefined();
+    expect(logEntry!.deviceMeta).toContain('[Self-Signed]');
 
     // NOW the attacker hopes the doctor can access the patient's full medical records!
     // But since the tag lacked the Authority signature, the trust downgrade should prevent access.

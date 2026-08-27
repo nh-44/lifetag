@@ -79,6 +79,47 @@ describe('userRepository', () => {
     expect(triage).toBeNull();
     expect(medical).toBeNull();
   });
+
+  it('updateTriageProfile updates the profile data correctly', async () => {
+    const { user } = await seedUser({ userId: 'US10005' });
+    
+    const updated = await userRepository.updateTriageProfile(user.userId, {
+      bloodGroup: 'AB-',
+      allergies: ['Dust'],
+      age: 30, // Required for Prisma upsert's create block validation
+      emergencyContacts: [] // Required for Prisma upsert's create block validation
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated.bloodGroup).toBe('AB-');
+    expect(updated.allergies).toEqual(['Dust']);
+    
+    // Verify persistence
+    const dbRow = await testPrisma.triageProfile.findUnique({ where: { userId: user.userId } });
+    expect(dbRow!.bloodGroup).toBe('AB-');
+  });
+
+  it('updateMedicalHistory updates the medical data correctly', async () => {
+    const { user } = await seedUser({ userId: 'US10006' });
+    
+    const updated = await userRepository.updateMedicalHistory(user.userId, {
+      illnesses: ['Asthma'],
+      surgeries: ['Appendectomy'],
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated.illnesses).toEqual(['Asthma']);
+    expect(updated.surgeries).toEqual(['Appendectomy']);
+  });
+
+  it('deleteByUserId actually deletes the user', async () => {
+    const { user } = await seedUser({ userId: 'US10007' });
+    
+    await userRepository.deleteByUserId(user.userId);
+    
+    const dbRow = await testPrisma.user.findUnique({ where: { userId: user.userId } });
+    expect(dbRow).toBeNull();
+  });
 });
 
 // ─── doctorRepository ────────────────────────────────────────────────────────
@@ -107,6 +148,23 @@ describe('doctorRepository', () => {
     const result = await doctorRepository.findByUserId('DR00000');
     expect(result).toBeNull();
   });
+
+  it('update modifies the doctor profile correctly', async () => {
+    const { doctor } = await seedDoctor({ userId: 'DR20003', name: 'Dr. Old' });
+    
+    const updated = await doctorRepository.update(doctor.userId, {
+      name: 'Dr. New',
+      hospitalClinic: 'General Hospital'
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated.name).toBe('Dr. New');
+    expect(updated.hospitalClinic).toBe('General Hospital');
+    
+    // Verify persistence
+    const dbRow = await testPrisma.doctorProfile.findUnique({ where: { userId: doctor.userId } });
+    expect(dbRow!.hospitalClinic).toBe('General Hospital');
+  });
 });
 
 // ─── firstResponderRepository ─────────────────────────────────────────────────
@@ -129,6 +187,19 @@ describe('firstResponderRepository', () => {
 
     expect(result).not.toBeNull();
     expect(result!.name).toBe('Sam');
+  });
+
+  it('update modifies the first responder profile correctly', async () => {
+    const { responder } = await seedFirstResponder({ userId: 'FR30003' });
+    
+    const updated = await firstResponderRepository.update(responder.userId, {
+      agency: 'Fire Dept',
+      organizationType: 'GOVERNMENT'
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated.agency).toBe('Fire Dept');
+    expect(updated.organizationType).toBe('GOVERNMENT');
   });
 });
 
