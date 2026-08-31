@@ -14,9 +14,36 @@ interface NfcTrial {
   note: string;
   success: boolean;
   retryCount: number;
+  attemptsUsed: number; // internal auto-retries within this one trial (write only; read is always 1)
   handshakeMs: number | null; // tap -> payload available (read) / tap -> write complete (write)
   tapToRenderMs: number | null; // read only: tap -> full verification + DOM commit
+  errorMessage: string;
   timestamp: string;
+}
+
+/** Chrome's Web NFC throws NetworkError ("IO error"/tag-lost-style messages) fairly
+ * often on write, since a write transceives far more bytes than a read and is
+ * correspondingly more sensitive to the tag moving mid-operation. Retrying a
+ * couple of times within the same physical tap is standard practice for this
+ * class of transient hardware I/O error (see the identical NetworkError handling
+ * already in client/src/components/nfc/NfcWriter.tsx). */
+async function withRetries<T>(fn: () => Promise<T>, maxAttempts: number, delayMs: number): Promise<{ result: T; attemptsUsed: number }> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await fn();
+      return { result, attemptsUsed: attempt };
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError;
+}
+
+function describeError(e: any): string {
+  const name = e?.name ? `${e.name}: ` : "";
+  return `${name}${e?.message || String(e)}`;
 }
 
 interface DeviceInfo {
@@ -60,7 +87,8 @@ async function detectDeviceInfo(): Promise<DeviceInfo> {
 const BenchNfc = () => {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>({ model: "", androidVersion: "", chromeVersion: "" });
   const [note, setNote] = useState("1cm, flat, bare tag");
-  const [retryCount, setRetryCount] = useState(0);
+  const [readRetryCount, setReadRetryCount] = useState(0);
+  const [writeRetryCount, setWriteRetryCount] = useState(0);
   const [trials, setTrials] = useState<NfcTrial[]>([]);
   const [status, setStatus] = useState("");
   const [isNfcSupported, setIsNfcSupported] = useState<boolean | null>(null);
@@ -85,19 +113,29 @@ const BenchNfc = () => {
 
   const recordTrial = (trial: NfcTrial) => {
     persist([...trials, trial]);
-    setRetryCount(trial.success ? 0 : retryCount + 1); // auto-tracks retries: resets on success
+    if (trial.trialType === "read") setReadRetryCount(trial.success ? 0 : readRetryCount + 1);
+    else setWriteRetryCount(trial.success ? 0 : writeRetryCount + 1);
   };
 
   const runReadTrial = async () => {
     setStatus("Hold the written tag near the phone now...");
-    try {
-      // @ts-ignore
-      const ndef = new NDEFReader();
-      const controller = new AbortController();
-      const tapStart = performance.now();
+    // @ts-ignore
+    const ndef = new NDEFReader();
+    const controller = new AbortController();
+    const tapStart = performance.now();
 
+    // Every exit path MUST abort `controller` — an un-aborted ndef.scan() leaves
+    // Android's NFC reader-mode registration active in the background, which can
+    // then conflict with a *later* ndef.write() call on the same page (this page
+    // runs read and write trials back-to-back without unmounting). Failing to do
+    // this on the error/exception paths (only the timeout and success paths did
+    // it before) was a real bug — very plausibly the cause of write trials
+    // failing with a "NetworkError"/IO-error after a prior read.
+    const finish = (fn: () => void) => { try { controller.abort(); } catch { /* already aborted */ } fn(); };
+
+    try {
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => { controller.abort(); reject(new Error("Timed out waiting for tap (10s)")); }, 10000);
+        const timeout = setTimeout(() => finish(() => reject(new Error("Timed out waiting for tap (10s)"))), 10000);
 
         ndef.addEventListener("reading", async (event: any) => {
           const handshakeMs = performance.now() - tapStart;
@@ -122,22 +160,24 @@ const BenchNfc = () => {
             const tapToRenderMs = performance.now() - tapStart;
 
             clearTimeout(timeout);
-            controller.abort();
-            recordTrial({ trialType: "read", note, success: true, retryCount, handshakeMs, tapToRenderMs, timestamp: new Date().toISOString() });
-            resolve();
+            finish(() => {
+              recordTrial({ trialType: "read", note, success: true, retryCount: readRetryCount, attemptsUsed: 1, handshakeMs, tapToRenderMs, errorMessage: "", timestamp: new Date().toISOString() });
+              resolve();
+            });
           } catch (e) {
             clearTimeout(timeout);
-            reject(e);
+            finish(() => reject(e));
           }
         });
-        ndef.addEventListener("error", (e: any) => { clearTimeout(timeout); reject(e); });
+        ndef.addEventListener("error", (e: any) => { clearTimeout(timeout); finish(() => reject(e)); });
         // @ts-ignore - the installed Web NFC type defs don't model NDEFScanOptions
-        ndef.scan({ signal: controller.signal }).catch(reject);
+        ndef.scan({ signal: controller.signal }).catch((e: any) => finish(() => reject(e)));
       });
       setStatus("Read trial recorded.");
     } catch (e: any) {
-      recordTrial({ trialType: "read", note, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
-      setStatus(`Read trial FAILED: ${e.message}`);
+      const errorMessage = describeError(e);
+      recordTrial({ trialType: "read", note, success: false, retryCount: readRetryCount, attemptsUsed: 1, handshakeMs: null, tapToRenderMs: null, errorMessage, timestamp: new Date().toISOString() });
+      setStatus(`Read trial FAILED: ${errorMessage}`);
     }
   };
 
@@ -154,17 +194,24 @@ const BenchNfc = () => {
       for (let i = 0; i < compressed.length; i++) binary += String.fromCharCode(compressed[i]);
       const text = `gzip:${btoa(binary)}`;
 
-      // @ts-ignore
-      const ndef = new NDEFReader();
       const tapStart = performance.now();
-      await ndef.write({ records: [{ recordType: "text", data: text, lang: "en" }] });
+      // Up to 3 attempts, 400ms apart, within the SAME physical tap — Web NFC
+      // write on Android throws a transient NetworkError ("IO error") often
+      // enough that NfcWriter.tsx already has a friendly message for it; an
+      // immediate retry frequently succeeds without the user re-tapping.
+      const { attemptsUsed } = await withRetries(async () => {
+        // @ts-ignore
+        const ndef = new NDEFReader();
+        await ndef.write({ records: [{ recordType: "text", data: text, lang: "en" }] });
+      }, 3, 400);
       const handshakeMs = performance.now() - tapStart;
 
-      recordTrial({ trialType: "write", note, success: true, retryCount, handshakeMs, tapToRenderMs: null, timestamp: new Date().toISOString() });
-      setStatus(`Write trial recorded (${handshakeMs.toFixed(1)} ms).`);
+      recordTrial({ trialType: "write", note, success: true, retryCount: writeRetryCount, attemptsUsed, handshakeMs, tapToRenderMs: null, errorMessage: "", timestamp: new Date().toISOString() });
+      setStatus(`Write trial recorded (${handshakeMs.toFixed(1)} ms, ${attemptsUsed} internal attempt${attemptsUsed > 1 ? "s" : ""}).`);
     } catch (e: any) {
-      recordTrial({ trialType: "write", note, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
-      setStatus(`Write trial FAILED: ${e.message}`);
+      const errorMessage = describeError(e);
+      recordTrial({ trialType: "write", note, success: false, retryCount: writeRetryCount, attemptsUsed: 3, handshakeMs: null, tapToRenderMs: null, errorMessage, timestamp: new Date().toISOString() });
+      setStatus(`Write trial FAILED after 3 attempts: ${errorMessage}`);
     }
   };
 
@@ -235,7 +282,7 @@ const BenchNfc = () => {
   };
 
   const downloadCsv = () => {
-    const headers = ["trialType", "note", "success", "retryCount", "handshakeMs", "tapToRenderMs", "timestamp"];
+    const headers = ["trialType", "note", "success", "retryCount", "attemptsUsed", "handshakeMs", "tapToRenderMs", "errorMessage", "timestamp"];
     const rows = trials.map((t) => headers.map((h) => JSON.stringify((t as any)[h] ?? "")).join(","));
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });

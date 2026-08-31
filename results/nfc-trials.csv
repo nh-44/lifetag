@@ -1,0 +1,9 @@
+trialType,note,success,retryCount,handshakeMs,tapToRenderMs,timestamp
+"write","1cm, flat, bare tag",false,0,"","","2026-08-31T08:45:18.882Z"
+"write","1cm, flat, bare tag",false,1,"","","2026-08-31T08:45:25.713Z"
+"read","1cm, flat, bare tag",true,2,2978.89999999851,3000.2999999970198,"2026-08-31T08:45:37.419Z"
+"write","1cm, flat, bare tag",false,0,"","","2026-08-31T08:45:57.392Z"
+"read","1cm, flat, bare tag",true,1,1333.5,1356.5,"2026-08-31T08:45:59.494Z"
+"read","1cm, flat, bare tag",true,0,2397.2999999970198,2419.5,"2026-08-31T08:46:10.376Z"
+"write","1cm, flat, bare tag",false,0,"","","2026-08-31T08:46:20.935Z"
+"write","1cm, flat, bare tag",false,1,"","","2026-08-31T08:46:28.284Z"

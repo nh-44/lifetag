@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T08:46:51.556Z",
+    "platform": "mobile-web-crypto",
+    "deviceModel": "CPH2487",
+    "androidVersion": "10",
+    "chromeVersion": "151.0.0.0",
+    "warmupIterations": 20,
+    "measuredIterations": 100,
+    "encoding": "V1 (current production: short-format JSON, JWK public key, base64 signatures, gzip)"
+  },
+  "operations": {
+    "ecdsaKeyGeneration": {
+      "n": 100,
+      "meanMs": 0.086,
+      "medianMs": 0.1,
+      "stdDevMs": 0.06,
+      "minMs": 0,
+      "maxMs": 0.3,
+      "p95Ms": 0.2
+    },
+    "signatureCreation": {
+      "n": 100,
+      "meanMs": 0.076,
+      "medianMs": 0.1,
+      "stdDevMs": 0.057,
+      "minMs": 0,
+      "maxMs": 0.2,
+      "p95Ms": 0.2
+    },
+    "tier1Verification_contentSignature": {
+      "n": 100,
+      "meanMs": 0.146,
+      "medianMs": 0.1,
+      "stdDevMs": 0.061,
+      "minMs": 0,
+      "maxMs": 0.3,
+      "p95Ms": 0.2
+    },
+    "tier2Verification_authoritySignature": {
+      "n": 100,
+      "meanMs": 0.147,
+      "medianMs": 0.1,
+      "stdDevMs": 0.056,
+      "minMs": 0,
+      "maxMs": 0.3,
+      "p95Ms": 0.2
+    },
+    "compression_gzip": {
+      "n": 100,
+      "meanMs": 1.077,
+      "medianMs": 1,
+      "stdDevMs": 0.605,
+      "minMs": 0.8,
+      "maxMs": 6.8,
+      "p95Ms": 1.4
+    },
+    "decompression_gunzip": {
+      "n": 100,
+      "meanMs": 1.239,
+      "medianMs": 1.2,
+      "stdDevMs": 0.532,
+      "minMs": 0.8,
+      "maxMs": 5.7,
+      "p95Ms": 1.6
+    },
+    "scanPathTotal_decompressPlusTier1PlusTier2": {
+      "n": 100,
+      "meanMs": 1.798,
+      "medianMs": 1.7,
+      "stdDevMs": 0.53,
+      "minMs": 1.2,
+      "maxMs": 5.4,
+      "p95Ms": 2.5
+    }
+  }
+}

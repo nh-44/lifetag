@@ -216,6 +216,14 @@ const NfcScanner = ({ isScanning, onScanComplete, onScanError }: NfcScannerProps
         
         ndef.addEventListener("error", (error: any) => {
           console.error("NFC Error:", error);
+          // Must abort here too, not just in the isScanning-false cleanup below:
+          // an un-aborted ndef.scan() leaves Android's NFC reader-mode registration
+          // active in the background even after this "error" event fires, which can
+          // then conflict with a subsequent ndef.write() elsewhere on the same page.
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+          }
           onScanError(error.message || "Failed to read NFC tag");
         });
         

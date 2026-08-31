@@ -16,6 +16,30 @@ interface NfcWriterProps {
   onWriteError: (error: string) => void;
 }
 
+/**
+ * Web NFC's write() on Android throws a transient NetworkError ("IO error" /
+ * tag-lost-style message, see the errorMessage mapping in handleWrite's catch
+ * block below) more often than read() does, because a write transceives far
+ * more bytes and is correspondingly more sensitive to the tag moving mid-
+ * operation. Retrying a couple of times within the same physical tap — before
+ * asking the user to re-tap — resolves most of these without any UX cost.
+ */
+async function writeWithRetries(records: any[], maxAttempts = 3, delayMs = 400): Promise<void> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // @ts-ignore
+      const ndef = new NDEFReader();
+      await ndef.write({ records });
+      return;
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   const [isNfcSupported, setIsNfcSupported] = useState<boolean | null>(null);
   const [isWriting, setIsWriting] = useState(false);
@@ -192,22 +216,20 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
       setGeneratedPayloadHex(compressedHex);
 
       if (isNfcSupported) {
-        // @ts-ignore
-        const ndef = new NDEFReader();
         toast.info(`Hold the NFC tag near your device... (${compressedBytes.length} bytes)`);
 
         const startTimer = performance.now();
 
-        // 3. Write Base64 Gzip payload as a standard text record (universally compatible)
-        await ndef.write({
-          records: [
-            {
-              recordType: "text",
-              data: textRecordValue,
-              lang: "en"
-            }
-          ]
-        });
+        // 3. Write Base64 Gzip payload as a standard text record (universally compatible).
+        // Retries internally on the transient NetworkError/IO-error class Web NFC write()
+        // is known to throw (see writeWithRetries above and the NetworkError branch below).
+        await writeWithRetries([
+          {
+            recordType: "text",
+            data: textRecordValue,
+            lang: "en"
+          }
+        ]);
 
         const endTimer = performance.now();
         const duration = endTimer - startTimer;
@@ -250,7 +272,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
       } else if (error.name === 'NotSupportedError') {
         errorMessage = "NFC is not supported on this device or tag configuration.";
       } else if (error.name === 'NetworkError') {
-        errorMessage = "NFC connection lost/IO Error. Please hold the tag steady against the back of the device for 2-3 seconds.";
+        errorMessage = "NFC connection lost/IO Error after 3 attempts. Please hold the tag steady against the back of the device for 2-3 seconds and try again.";
       }
       onWriteError(errorMessage);
       toast.error(`Write failed: ${errorMessage}`);
