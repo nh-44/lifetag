@@ -338,7 +338,13 @@ export class NfcCryptoService {
     };
     const fullBg = bgMapInv[short.d.b] || short.d.b;
 
-    const allergies = short.d.a.length === 0 ? ["None"] : short.d.a;
+    // Must stay [] (not a placeholder like "None") for an empty list: the
+    // patient signature was computed over the original triageData before
+    // toShortFormat's cleanup ran, so reconstructing anything other than the
+    // exact original value here breaks verifyTagIntegrity for every patient
+    // with no listed allergies. A "None" placeholder belongs in display
+    // logic, not in data that must byte-for-byte match what was signed.
+    const allergies = short.d.a;
 
     return {
       version: short.v,

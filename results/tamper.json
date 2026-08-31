@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T05:40:45.216Z",
+    "nodeVersion": "v24.17.0",
+    "nPerClass": 200,
+    "totalN": 1600,
+    "metric": "reject == trustedAuthority !== true (see file header comment for why this, not raw `verified`, is the meaningful security metric)",
+    "verifiedAgainst": "server/src/services/nfc.service.ts NfcService.verifyTagIntegrity (real production code, post P1363 fix)"
+  },
+  "classes": [
+    {
+      "className": "Single-byte corruption: clinical content",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 0,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Single-byte corruption: public key field",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 0,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Single-byte corruption: patient signature",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 0,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Single-byte corruption: authority signature",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 200,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Payload truncation at random offset",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 0,
+      "decompressionFailedCount": 200,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Cross-patient graft (A's key+sig on B's content)",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 0,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Forged-key (attacker-generated keypair + garbage authority sig)",
+      "expectedOutcome": "reject",
+      "n": 200,
+      "trustedAuthorityTrueCount": 0,
+      "verifiedTrueCount": 200,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    },
+    {
+      "className": "Valid unmodified payload (control)",
+      "expectedOutcome": "accept",
+      "n": 200,
+      "trustedAuthorityTrueCount": 200,
+      "verifiedTrueCount": 200,
+      "decompressionFailedCount": 0,
+      "rejectionOrAcceptanceRate": 1,
+      "anomalyCount": 0,
+      "anomalies": []
+    }
+  ],
+  "summary": {
+    "controlFalseRejects": 0,
+    "controlFalseRejectRate": 0,
+    "allAttackClassesFullyRejected": true
+  }
+}

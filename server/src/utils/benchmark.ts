@@ -186,10 +186,15 @@ export function runBenchmark(iterations: number = 100) {
   const baseKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const basePublicKeyJwk = baseKeyPair.publicKey.export({ format: 'jwk' });
   
-  // Sign baseline triage payload
-  const signObj = crypto.createSign('SHA256');
-  signObj.update(JSON.stringify(samplePayload.triageData));
-  const baseSignature = signObj.sign(baseKeyPair.privateKey).toString('base64');
+  // Sign baseline triage payload using the real client wire format (raw IEEE P1363,
+  // not Node's default DER) so this benchmark exercises the same signatures
+  // CryptoUtils.verifyEcdsaSignature actually verifies in production.
+  const baseSignature = crypto
+    .sign('sha256', Buffer.from(JSON.stringify(samplePayload.triageData)), {
+      key: baseKeyPair.privateKey,
+      dsaEncoding: 'ieee-p1363',
+    })
+    .toString('base64');
   
   const executablePayload: TriagePayload = {
     ...samplePayload,
@@ -206,11 +211,14 @@ export function runBenchmark(iterations: number = 100) {
     const t1 = performance.now();
     ecdsaKeyGenTimes.push(t1 - t0);
 
-    // B. ECDSA P-256 Signature Generation
+    // B. ECDSA P-256 Signature Generation (raw IEEE P1363, matching Web Crypto / production)
     const t2 = performance.now();
-    const signer = crypto.createSign('SHA256');
-    signer.update(JSON.stringify(samplePayload.triageData));
-    const signature = signer.sign(keyPair.privateKey).toString('base64');
+    const signature = crypto
+      .sign('sha256', Buffer.from(JSON.stringify(samplePayload.triageData)), {
+        key: keyPair.privateKey,
+        dsaEncoding: 'ieee-p1363',
+      })
+      .toString('base64');
     const t3 = performance.now();
     ecdsaSignTimes.push(t3 - t2);
 
@@ -255,9 +263,12 @@ export function runBenchmark(iterations: number = 100) {
     // Generate valid signed payload
     const keyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
     const pubJwk = keyPair.publicKey.export({ format: 'jwk' });
-    const signObj = crypto.createSign('SHA256');
-    signObj.update(JSON.stringify(samplePayload.triageData));
-    const validSignature = signObj.sign(keyPair.privateKey).toString('base64');
+    const validSignature = crypto
+      .sign('sha256', Buffer.from(JSON.stringify(samplePayload.triageData)), {
+        key: keyPair.privateKey,
+        dsaEncoding: 'ieee-p1363',
+      })
+      .toString('base64');
     
     // Mutate it maliciously
     const maliciouslyAlteredTriageData = {

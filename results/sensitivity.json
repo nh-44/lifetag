@@ -1,0 +1,387 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T05:33:43.041Z",
+    "nodeVersion": "v24.17.0",
+    "encoding": "V3 (SEC1 compressed point, raw r||s signatures, no compression, raw binary NDEF record) — best performer from Phase 1",
+    "ntag215BudgetBytes": 504,
+    "requestedAllergyCounts": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      8,
+      10
+    ],
+    "extendedAllergyCounts": [
+      12,
+      15,
+      18,
+      20,
+      25,
+      30
+    ],
+    "contactCounts": [
+      1,
+      2,
+      3
+    ],
+    "assumptions": {
+      "allergenNames": [
+        "Penicillin",
+        "Amoxicillin",
+        "Aspirin",
+        "Ibuprofen",
+        "Sulfonamides",
+        "Cephalosporins",
+        "Peanuts",
+        "Tree Nuts",
+        "Shellfish",
+        "Latex",
+        "Codeine",
+        "Morphine"
+      ],
+      "contactFormat": "Indian mobile, E.164-style (+91 + 10 digits), no separators",
+      "contacts": [
+        {
+          "userId": "+919876543210",
+          "name": "Priya Sharma"
+        },
+        {
+          "userId": "+918765432109",
+          "name": "Rajesh Kumar"
+        },
+        {
+          "userId": "+917654321098",
+          "name": "Anita Verma"
+        }
+      ],
+      "patientName": "Ravi Krishnan",
+      "fhirPatientIdFormat": "5-digit numeric, matching NfcScanner.tsx /^\\d{5}$/ validation",
+      "note": "Points with allergyCount > 12 repeat curated allergen names (curated list exhausted) — see withinCuratedRealism flag per cell. They exist only to locate the V3/504B crossover, not as clinically realistic allergy lists."
+    }
+  },
+  "cells": [
+    {
+      "allergyCount": 0,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 224,
+      "fitsNtag215": true,
+      "marginVsNtag215": 280
+    },
+    {
+      "allergyCount": 1,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 235,
+      "fitsNtag215": true,
+      "marginVsNtag215": 269
+    },
+    {
+      "allergyCount": 2,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 247,
+      "fitsNtag215": true,
+      "marginVsNtag215": 257
+    },
+    {
+      "allergyCount": 3,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 255,
+      "fitsNtag215": true,
+      "marginVsNtag215": 249
+    },
+    {
+      "allergyCount": 5,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 283,
+      "fitsNtag215": true,
+      "marginVsNtag215": 221
+    },
+    {
+      "allergyCount": 8,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 316,
+      "fitsNtag215": true,
+      "marginVsNtag215": 188
+    },
+    {
+      "allergyCount": 10,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 332,
+      "fitsNtag215": true,
+      "marginVsNtag215": 172
+    },
+    {
+      "allergyCount": 12,
+      "contactCount": 1,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 349,
+      "fitsNtag215": true,
+      "marginVsNtag215": 155
+    },
+    {
+      "allergyCount": 15,
+      "contactCount": 1,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 380,
+      "fitsNtag215": true,
+      "marginVsNtag215": 124
+    },
+    {
+      "allergyCount": 18,
+      "contactCount": 1,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 418,
+      "fitsNtag215": true,
+      "marginVsNtag215": 86
+    },
+    {
+      "allergyCount": 20,
+      "contactCount": 1,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 436,
+      "fitsNtag215": true,
+      "marginVsNtag215": 68
+    },
+    {
+      "allergyCount": 25,
+      "contactCount": 1,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 480,
+      "fitsNtag215": true,
+      "marginVsNtag215": 24
+    },
+    {
+      "allergyCount": 30,
+      "contactCount": 1,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 538,
+      "fitsNtag215": false,
+      "marginVsNtag215": -34
+    },
+    {
+      "allergyCount": 0,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 251,
+      "fitsNtag215": true,
+      "marginVsNtag215": 253
+    },
+    {
+      "allergyCount": 1,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 267,
+      "fitsNtag215": true,
+      "marginVsNtag215": 237
+    },
+    {
+      "allergyCount": 2,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 279,
+      "fitsNtag215": true,
+      "marginVsNtag215": 225
+    },
+    {
+      "allergyCount": 3,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 287,
+      "fitsNtag215": true,
+      "marginVsNtag215": 217
+    },
+    {
+      "allergyCount": 5,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 310,
+      "fitsNtag215": true,
+      "marginVsNtag215": 194
+    },
+    {
+      "allergyCount": 8,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 343,
+      "fitsNtag215": true,
+      "marginVsNtag215": 161
+    },
+    {
+      "allergyCount": 10,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 359,
+      "fitsNtag215": true,
+      "marginVsNtag215": 145
+    },
+    {
+      "allergyCount": 12,
+      "contactCount": 2,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 376,
+      "fitsNtag215": true,
+      "marginVsNtag215": 128
+    },
+    {
+      "allergyCount": 15,
+      "contactCount": 2,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 407,
+      "fitsNtag215": true,
+      "marginVsNtag215": 97
+    },
+    {
+      "allergyCount": 18,
+      "contactCount": 2,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 445,
+      "fitsNtag215": true,
+      "marginVsNtag215": 59
+    },
+    {
+      "allergyCount": 20,
+      "contactCount": 2,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 463,
+      "fitsNtag215": true,
+      "marginVsNtag215": 41
+    },
+    {
+      "allergyCount": 25,
+      "contactCount": 2,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 507,
+      "fitsNtag215": false,
+      "marginVsNtag215": -3
+    },
+    {
+      "allergyCount": 30,
+      "contactCount": 2,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 565,
+      "fitsNtag215": false,
+      "marginVsNtag215": -61
+    },
+    {
+      "allergyCount": 0,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 282,
+      "fitsNtag215": true,
+      "marginVsNtag215": 222
+    },
+    {
+      "allergyCount": 1,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 293,
+      "fitsNtag215": true,
+      "marginVsNtag215": 211
+    },
+    {
+      "allergyCount": 2,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 305,
+      "fitsNtag215": true,
+      "marginVsNtag215": 199
+    },
+    {
+      "allergyCount": 3,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 313,
+      "fitsNtag215": true,
+      "marginVsNtag215": 191
+    },
+    {
+      "allergyCount": 5,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 336,
+      "fitsNtag215": true,
+      "marginVsNtag215": 168
+    },
+    {
+      "allergyCount": 8,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 369,
+      "fitsNtag215": true,
+      "marginVsNtag215": 135
+    },
+    {
+      "allergyCount": 10,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 385,
+      "fitsNtag215": true,
+      "marginVsNtag215": 119
+    },
+    {
+      "allergyCount": 12,
+      "contactCount": 3,
+      "withinCuratedRealism": true,
+      "totalTagBytes": 402,
+      "fitsNtag215": true,
+      "marginVsNtag215": 102
+    },
+    {
+      "allergyCount": 15,
+      "contactCount": 3,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 433,
+      "fitsNtag215": true,
+      "marginVsNtag215": 71
+    },
+    {
+      "allergyCount": 18,
+      "contactCount": 3,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 471,
+      "fitsNtag215": true,
+      "marginVsNtag215": 33
+    },
+    {
+      "allergyCount": 20,
+      "contactCount": 3,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 489,
+      "fitsNtag215": true,
+      "marginVsNtag215": 15
+    },
+    {
+      "allergyCount": 25,
+      "contactCount": 3,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 533,
+      "fitsNtag215": false,
+      "marginVsNtag215": -29
+    },
+    {
+      "allergyCount": 30,
+      "contactCount": 3,
+      "withinCuratedRealism": false,
+      "totalTagBytes": 591,
+      "fitsNtag215": false,
+      "marginVsNtag215": -87
+    }
+  ],
+  "derived": {
+    "maxAllergiesThatFitBy504_perContactCount": {
+      "1": 25,
+      "2": 20,
+      "3": 20
+    },
+    "anyOverBudgetInTestedRange": true,
+    "note": "V3 exceeded the 504B NTAG215 budget within the tested range — see cells[] for the exact crossover."
+  }
+}

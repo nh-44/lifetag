@@ -39,9 +39,11 @@ describe('NfcService', () => {
       dnrStatus: true,
     };
     
-    const signer = crypto.createSign('SHA256');
-    signer.update(Buffer.from(JSON.stringify(triageData)));
-    const signature = signer.sign(patientKeys.privateKey).toString('base64');
+    // Real patient signatures come from the browser's Web Crypto API (raw IEEE P1363,
+    // not Node's default DER) — sign the same way here to exercise the real wire format.
+    const signature = crypto
+      .sign('sha256', Buffer.from(JSON.stringify(triageData)), { key: patientKeys.privateKey, dsaEncoding: 'ieee-p1363' })
+      .toString('base64');
 
     return {
       version: '2.0',
@@ -101,11 +103,13 @@ describe('NfcService', () => {
     it('rejects a forged authority signature (wrong signing key)', () => {
       const payload = generateValidPatientPayload();
       
-      // Sign with a DIFFERENT generated key (rogue authority)
+      // Sign with a DIFFERENT generated key (rogue authority), using the same IEEE
+      // P1363 encoding the real authority signature would use, so this test isolates
+      // "wrong key" rejection rather than an encoding mismatch.
       const rogueKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-      const signer = crypto.createSign('SHA256');
-      signer.update(payload.tagId);
-      payload.authoritySignature = signer.sign(rogueKeys.privateKey).toString('base64');
+      payload.authoritySignature = crypto
+        .sign('sha256', Buffer.from(payload.tagId), { key: rogueKeys.privateKey, dsaEncoding: 'ieee-p1363' })
+        .toString('base64');
       
       const { verified, trustedAuthority } = NfcService.verifyTagIntegrity(payload);
       

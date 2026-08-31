@@ -1,0 +1,189 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T05:29:47.121Z",
+    "nodeVersion": "v24.17.0",
+    "capacityBytes": {
+      "NTAG213": 144,
+      "NTAG215": 504,
+      "NTAG216": 888
+    },
+    "variants": {
+      "V1": {
+        "publicKey": "JWK base64url x/y",
+        "signatures": "base64",
+        "compression": "gzip",
+        "ndefRecord": "text"
+      },
+      "V2": {
+        "publicKey": "JWK base64url x/y",
+        "signatures": "base64",
+        "compression": "raw DEFLATE",
+        "ndefRecord": "text"
+      },
+      "V3": {
+        "publicKey": "SEC1 compressed point (33B)",
+        "signatures": "raw r||s (64B each)",
+        "compression": "none",
+        "ndefRecord": "unknown-binary"
+      },
+      "V4": {
+        "publicKey": "SEC1 compressed point (33B)",
+        "signatures": "raw r||s (64B each)",
+        "compression": "raw DEFLATE",
+        "ndefRecord": "unknown-binary"
+      }
+    }
+  },
+  "profiles": {
+    "Small Profile": {
+      "V1": {
+        "contentBytes": 413,
+        "compressedBytes": 368,
+        "encodedContentBytes": 497,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 512,
+        "marginVsNtag215": -8,
+        "marginVsNtag216": 376,
+        "fitsNtag215": false,
+        "fitsNtag216": true
+      },
+      "V2": {
+        "contentBytes": 413,
+        "compressedBytes": 350,
+        "encodedContentBytes": 473,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 488,
+        "marginVsNtag215": 16,
+        "marginVsNtag216": 400,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      },
+      "V3": {
+        "contentBytes": 206,
+        "compressedBytes": 206,
+        "encodedContentBytes": 206,
+        "ndefRecordBytes": 3,
+        "tlvBytes": 3,
+        "totalTagBytes": 212,
+        "marginVsNtag215": 292,
+        "marginVsNtag216": 676,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      },
+      "V4": {
+        "contentBytes": 206,
+        "compressedBytes": 211,
+        "encodedContentBytes": 211,
+        "ndefRecordBytes": 3,
+        "tlvBytes": 3,
+        "totalTagBytes": 217,
+        "marginVsNtag215": 287,
+        "marginVsNtag216": 671,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      }
+    },
+    "Medium Profile": {
+      "V1": {
+        "contentBytes": 488,
+        "compressedBytes": 413,
+        "encodedContentBytes": 557,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 572,
+        "marginVsNtag215": -68,
+        "marginVsNtag216": 316,
+        "fitsNtag215": false,
+        "fitsNtag216": true
+      },
+      "V2": {
+        "contentBytes": 488,
+        "compressedBytes": 395,
+        "encodedContentBytes": 533,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 548,
+        "marginVsNtag215": -44,
+        "marginVsNtag216": 340,
+        "fitsNtag215": false,
+        "fitsNtag216": true
+      },
+      "V3": {
+        "contentBytes": 263,
+        "compressedBytes": 263,
+        "encodedContentBytes": 263,
+        "ndefRecordBytes": 6,
+        "tlvBytes": 5,
+        "totalTagBytes": 274,
+        "marginVsNtag215": 230,
+        "marginVsNtag216": 614,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      },
+      "V4": {
+        "contentBytes": 263,
+        "compressedBytes": 268,
+        "encodedContentBytes": 268,
+        "ndefRecordBytes": 6,
+        "tlvBytes": 5,
+        "totalTagBytes": 279,
+        "marginVsNtag215": 225,
+        "marginVsNtag216": 609,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      }
+    },
+    "Large Profile": {
+      "V1": {
+        "contentBytes": 684,
+        "compressedBytes": 518,
+        "encodedContentBytes": 697,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 712,
+        "marginVsNtag215": -208,
+        "marginVsNtag216": 176,
+        "fitsNtag215": false,
+        "fitsNtag216": true
+      },
+      "V2": {
+        "contentBytes": 684,
+        "compressedBytes": 500,
+        "encodedContentBytes": 673,
+        "ndefRecordBytes": 10,
+        "tlvBytes": 5,
+        "totalTagBytes": 688,
+        "marginVsNtag215": -184,
+        "marginVsNtag216": 200,
+        "fitsNtag215": false,
+        "fitsNtag216": true
+      },
+      "V3": {
+        "contentBytes": 402,
+        "compressedBytes": 402,
+        "encodedContentBytes": 402,
+        "ndefRecordBytes": 6,
+        "tlvBytes": 5,
+        "totalTagBytes": 413,
+        "marginVsNtag215": 91,
+        "marginVsNtag216": 475,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      },
+      "V4": {
+        "contentBytes": 402,
+        "compressedBytes": 403,
+        "encodedContentBytes": 403,
+        "ndefRecordBytes": 6,
+        "tlvBytes": 5,
+        "totalTagBytes": 414,
+        "marginVsNtag215": 90,
+        "marginVsNtag216": 474,
+        "fitsNtag215": true,
+        "fitsNtag216": true
+      }
+    }
+  }
+}

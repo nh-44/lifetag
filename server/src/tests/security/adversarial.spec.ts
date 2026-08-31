@@ -212,10 +212,12 @@ describe('Crypto Adversarial: Stale payload replay', () => {
       dnrStatus: false
     };
 
+    // Real patient signatures come from the browser's Web Crypto API (raw IEEE P1363,
+    // not Node's default DER) — sign the same way here to exercise the real wire format.
     const payloadToSign = Buffer.from(JSON.stringify(triageData));
-    const signer = crypto.createSign('SHA256');
-    signer.update(payloadToSign);
-    const signature = signer.sign(keys.privateKey).toString('base64');
+    const signature = crypto
+      .sign('sha256', payloadToSign, { key: keys.privateKey, dsaEncoding: 'ieee-p1363' })
+      .toString('base64');
 
     const tagPayload = {
       version: '1.0',
@@ -261,10 +263,12 @@ describe('Crypto Adversarial: Trust-downgrade enforcement', () => {
       dnrStatus: false
     };
 
+    // Real patient signatures come from the browser's Web Crypto API (raw IEEE P1363,
+    // not Node's default DER) — sign the same way here to exercise the real wire format.
     const payloadToSign = Buffer.from(JSON.stringify(triageData));
-    const signer = crypto.createSign('SHA256');
-    signer.update(payloadToSign);
-    const signature = signer.sign(keys.privateKey).toString('base64');
+    const signature = crypto
+      .sign('sha256', payloadToSign, { key: keys.privateKey, dsaEncoding: 'ieee-p1363' })
+      .toString('base64');
 
     const tagPayload = {
       version: '1.0',

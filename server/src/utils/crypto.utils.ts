@@ -25,10 +25,15 @@ export class CryptoUtils {
         : Buffer.from(JSON.stringify(triageData));
       const signatureBuffer = Buffer.from(signatureBase64, 'base64');
 
+      // The Web Crypto API (used by the real browser client) always produces/expects
+      // raw IEEE P1363 signatures (r||s, 64 bytes for P-256), not Node's default DER
+      // encoding. Signatures verified here originate either from the patient's browser
+      // (Web Crypto) or from signWithAuthorityKey below (also P1363) — both sides must
+      // agree on this encoding or genuine signatures fail verification.
       return crypto.verify(
         'sha256',
         dataBuffer,
-        publicKey,
+        { key: publicKey, dsaEncoding: 'ieee-p1363' },
         signatureBuffer
       );
     } catch (e) {
@@ -98,9 +103,14 @@ export class CryptoUtils {
         format: 'jwk',
       });
 
-      const signObj = crypto.createSign('SHA256');
-      signObj.update(patientPublicKeyString);
-      return signObj.sign(privateKey).toString('base64');
+      // Signed as raw IEEE P1363 (not Node's default DER) so the client's Web Crypto
+      // subtle.verify() — which only accepts P1363 — can validate this signature
+      // entirely offline. See the matching note in verifyEcdsaSignature above.
+      const signature = crypto.sign('sha256', Buffer.from(patientPublicKeyString, 'utf8'), {
+        key: privateKey,
+        dsaEncoding: 'ieee-p1363',
+      });
+      return signature.toString('base64');
     } catch (e) {
       console.error('Failed to sign with Authority private key:', e);
       return '';

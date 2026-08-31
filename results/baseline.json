@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T05:41:56.480Z",
+    "nodeVersion": "v24.17.0",
+    "warmupIterations": 20,
+    "measuredIterations": 100,
+    "note": "time-to-render = decompress + JSON.parse only (compute-only proxy, not real browser paint time). See file header for what is and is not measured here."
+  },
+  "signedPath": {
+    "totalTagBytes": 564,
+    "fitsNtag215": false,
+    "timeToRenderMs": {
+      "n": 100,
+      "meanMs": 0.008,
+      "medianMs": 0.007,
+      "stdDevMs": 0.004,
+      "minMs": 0.007,
+      "maxMs": 0.031,
+      "p95Ms": 0.021
+    },
+    "scanPathTotalMs_decompressPlusTier1PlusTier2": {
+      "n": 100,
+      "meanMs": 0.115,
+      "medianMs": 0.11,
+      "stdDevMs": 0.012,
+      "minMs": 0.106,
+      "maxMs": 0.188,
+      "p95Ms": 0.139
+    }
+  },
+  "baselinePlaintextPath": {
+    "totalTagBytes": 239,
+    "fitsNtag215": true,
+    "timeToRenderMs": {
+      "n": 100,
+      "meanMs": 0.012,
+      "medianMs": 0.006,
+      "stdDevMs": 0.048,
+      "minMs": 0.005,
+      "maxMs": 0.49,
+      "p95Ms": 0.021
+    }
+  },
+  "delta": {
+    "bytesAddedByTrustLayer": 325,
+    "bytesAddedByTrustLayerPercent": 135.98,
+    "timeToRenderDeltaMeanMs": -0.004,
+    "scanPathVsPlainTimeToRenderDeltaMeanMs": 0.103
+  }
+}

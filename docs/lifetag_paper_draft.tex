@@ -10,37 +10,43 @@
 
 \begin{document}
 
-\title{LifeTag: Decentralized, Offline-Resilient Emergency Medical Information System using Web NFC and Zero-Trust Verification}
+\title{AegisTag: Decentralized, Offline-Resilient Emergency Medical Information System using Web NFC and Zero-Trust Verification}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Naveen S}
+\author{\IEEEauthorblockN{Naveen S}
 \IEEEauthorblockA{\textit{Dept. of Computer Science Engineering} \\
 \textit{PES University}\\
 Bengaluru, India \\
-naveens@pes.edu}
+naveenselvaraj.selva@gmail.com}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Nandita R Nadig}
+\IEEEauthorblockN{Nandita R Nadig}
 \IEEEauthorblockA{\textit{Dept. of Computer Science Engineering} \\
 \textit{PES University}\\
 Bengaluru, India \\
-nanditarn@pes.edu}
+nanditanadig05@gmail.com}
 \and
-\IEEEauthorblockN{3\textsuperscript{rd} Preksha Kamalesh Babu}
+\IEEEauthorblockN{Preksha Kamalesh Babu}
 \IEEEauthorblockA{\textit{Dept. of Computer Science Engineering} \\
 \textit{PES University}\\
 Bengaluru, India \\
-prekshakreddy10@pes.edu}
+prekshakreddy10@gmail.com}
 \and
-\IEEEauthorblockN{4\textsuperscript{th} Navyashree SP}
+\IEEEauthorblockN{Navyashree SP}
 \IEEEauthorblockA{\textit{Dept. of Computer Science Engineering} \\
 \textit{PES University}\\
 Bengaluru, India \\
-navyashreesp7@pes.edu}
+navyashreesp7@gmail.com}
+\and
+\IEEEauthorblockN{Prajwala T. R.}
+\IEEEauthorblockA{\textit{Dept. of Computer Science Engineering} \\
+\textit{PES University}\\
+Bengaluru, India \\
+prajwalatr@gmail.com}
 }
 
 \maketitle
 
 \begin{abstract}
-Emergency situations require rapid access to critical patient information, but conventional electronic health record systems depend heavily on network connectivity and centralized infrastructure. This can delay access during accidents, disasters, or connectivity failures. We present LifeTag, an NFC-based emergency medical information system designed for rapid and offline-resilient access to essential triage data. The system combines passive NFC tags, role-based access control, cryptographic payload verification, and differentiated views for first responders and medical professionals. Critical emergency information can be accessed through NFC scanning, while more sensitive medical records remain protected through authenticated access controls. We evaluate LifeTag using NFC read/write performance, end-to-end access latency, payload capacity, reliability, and security validation experiments.
+Emergency situations require rapid access to critical patient information, but conventional electronic health record systems depend heavily on network connectivity and centralized infrastructure. This can delay access during accidents, disasters, or connectivity failures. We present AegisTag, an NFC-based emergency medical information system designed for rapid and offline-resilient access to essential triage data. The system combines passive NFC tags, role-based access control, cryptographic payload verification, and differentiated views for first responders and medical professionals. Critical emergency information can be accessed through NFC scanning, while more sensitive medical records remain protected through authenticated access and a consent-gated physician access model. We evaluate AegisTag's architecture, security design, and NFC payload budget, and outline a reproducible benchmarking methodology for read/write performance, cryptographic overhead, and payload compression using the system's built-in benchmark logging endpoint.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -57,21 +63,22 @@ Conventional Electronic Health Record (EHR) systems are heavily reliant on centr
 \subsection{Why NFC?}
 Near Field Communication (NFC) operates as a short-range wireless connectivity standard (13.56 MHz) enabling passive, battery-less tags to transmit data upon induction from an active reader (e.g., a smartphone). NFC presents several distinct advantages for EMS:
 \begin{enumerate}
-\item \textit{Zero Power Requirements}: Passive tags (e.g., NTAG213/215) run entirely on RF energy harvested from the scanning device, ensuring permanent availability.
+\item \textit{Zero Power Requirements}: Passive tags (e.g., NTAG215/216) run entirely on RF energy harvested from the scanning device, ensuring permanent availability.
 \item \textit{Intuitiveness}: Scanning requires a simple physical ``tap'' gesture, minimizing cognitive load for responders under high-stress conditions.
 \item \textit{Ubiquity}: Modern smartphones possess built-in NFC controllers, eliminating the need for specialized proprietary hardware.
 \end{enumerate}
 
-\subsection{Your Solution: LifeTag}
-We propose \textbf{LifeTag}, an offline-resilient, secure, and decentralized emergency medical information system using passive NFC tags and web-native interfaces. LifeTag stores critical triage data (e.g., allergies, blood group, emergency contacts) directly on a patient's wearable NFC tag. To overcome hardware memory constraints (e.g., 144 bytes on NTAG213 or 504 bytes on NTAG215), LifeTag implements a transparent JSON key-shortening and Gzip compression layer. Security is maintained without network access through a zero-trust, two-tier cryptographic verification protocol using Elliptic Curve Digital Signatures (ECDSA) and backend authority certificates. 
+\subsection{Our Solution: AegisTag}
+We propose \textbf{AegisTag}, an offline-resilient, secure, and decentralized emergency medical information system using passive NFC tags and web-native interfaces. AegisTag stores critical triage data (e.g., allergies, blood group, emergency contacts) directly on a patient's wearable NFC tag. To operate within the 504-byte user memory budget of an NTAG215 tag, AegisTag implements a Gzip compression layer over the triage JSON payload. Security is maintained without network access through a zero-trust, two-tier cryptographic verification protocol using Elliptic Curve Digital Signatures (ECDSA) and backend authority certificates.
 
 \subsection{Contributions}
 The primary contributions of this work are as follows:
 \begin{itemize}
-\item We design and implement an offline-resilient NFC data layout that packs complete emergency medical profiles under strict hardware constraints using Gzip compression and property mapping.
-\item We formulate a zero-trust, offline-verifiable two-tier security model using ECDSA signatures that ensures tag integrity and authenticity without backend database lookups.
+\item We design and implement an offline-resilient NFC data layout that packs a complete emergency triage profile, including a patient's ECDSA public key and signature, within the 504-byte constraint of an NTAG215 tag using Gzip compression.
+\item We formulate a zero-trust, offline-verifiable two-tier security model using ECDSA P-256 signatures that ensures tag integrity and authenticity without a backend database lookup at scan time.
+\item We design a consent-gated access model for deep medical records, in which a physician's access to a patient's full medical history is authorized either by a standing primary-physician relationship or by a recent (within 24 hours), audited emergency NFC scan of the patient's tag.
 \item We develop a web-native application utilizing the Web NFC API, enabling cross-platform mobile access without requiring native application installation.
-\item We perform a comprehensive performance evaluation demonstrating sub-millisecond cryptographic overhead, high compression ratios, and physical NFC read/write latency benchmarks.
+\item We describe a reproducible benchmarking methodology, backed by a dedicated benchmark-logging API and database table, for measuring cryptographic overhead, compression ratios, and physical NFC read/write latency.
 \end{itemize}
 
 \section{Related Work}
@@ -84,17 +91,21 @@ Various emergency systems have been proposed using QR codes, USB drives, or SMS-
 \subsection{Security and Privacy in NFC Systems}
 NFC security research has focused on encryption and authentication to prevent unauthorized skimming and tampering. Symmetric key cryptography (e.g., AES) requires secure key storage and distribution on reader devices, which is difficult to manage across fragmented municipal emergency agencies. Asymmetric cryptography provides public-key verification but is typically avoided due to the large memory footprint of RSA or ECDSA keys and signatures relative to passive tag budgets.
 
+\subsection{Consent and Access Governance in EHR Systems}
+Beyond cryptographic tag verification, a separate line of work addresses \textit{who} should be allowed to view a patient's full record once it is reachable, typically through role-based access control (RBAC) combined with break-glass emergency-access policies that grant temporary elevated access and log it for later audit. AegisTag's consent gate for physicians is an instance of this pattern, scoped specifically to the tag-scan event rather than a general emergency override.
+
 \subsection{Research Gap and Comparison}
-There is a lack of systems that offer \textit{both} offline data availability and decentralized cryptographic verification within the memory bounds of standard, low-cost passive NFC tags. LifeTag addresses this gap by combining Elliptic Curve Cryptography (ECC) with structural key compaction, enabling public-key validation directly on the mobile edge.
+There is a lack of systems that offer offline data availability, decentralized cryptographic verification within the memory bounds of standard, low-cost passive NFC tags, \textit{and} a governed policy for elevating a clinician from triage-level to full medical-record access. AegisTag addresses this gap by combining Elliptic Curve Cryptography (ECC) with structural key compaction and a scan-linked consent policy, enabling public-key validation directly on the mobile edge alongside auditable deep-record access.
 
 \section{System Requirements and Threat Model}
 \subsection{Functional Requirements}
-To be viable for emergency operations, LifeTag satisfies the following requirements:
+To be viable for emergency operations, AegisTag satisfies the following requirements:
 \begin{enumerate}
 \item \textit{Offline Access}: The system must render critical triage profiles (Name, Blood Group, Allergies, DNR status, Emergency Contacts) in zero-network environments.
 \item \textit{Data Integrity}: First responders must be able to verify that the tag data has not been modified or tampered with since creation.
 \item \textit{Authenticity}: Responders must verify that the tag was generated by a certified healthcare professional, preventing malicious creation of fake profiles.
 \item \textit{Web-Native Accessibility}: The scanning interface must load instantly via browser on any modern smartphone without native app store downloads.
+\item \textit{Governed Deep Access}: Access to a patient's full medical history (beyond triage data) must be restricted to a physician with an established treatment relationship, or to a physician who can demonstrate a recent, audited emergency encounter with the patient.
 \end{enumerate}
 
 \subsection{Adversary / Threat Model}
@@ -104,87 +115,97 @@ We assume an active adversary with physical access to the patient's tag. The adv
 \item \textit{Spoofing}: Creating a counterfeit tag containing falsified medical profiles.
 \item \textit{Eavesdropping}: Scanning the tag to skim private patient names and contacts (mitigated by limiting tag contents strictly to non-stigmatizing triage information).
 \end{itemize}
+We separately consider a lower-privilege adversary with a valid but unauthorized clinician account attempting to browse full medical histories of patients they have neither treated nor scanned; this is addressed by the consent gate in Section~V-C rather than by tag cryptography.
 
-\section{LifeTag System Architecture}
+\section{AegisTag System Architecture}
 \subsection{High-Level Architecture}
-The LifeTag architecture comprises three main entities:
+The AegisTag architecture comprises three main entities:
 \begin{enumerate}
-\item \textit{Patient Portal}: An administrative web portal used by authorized clinical staff to register users, manage medical records, and write signed triage data to the patient's NFC tag.
-\item \textit{Passive NFC Wearable}: A wristband or card containing an NTAG213/NTAG215 chip that holds the compressed, signed triage record.
-\item \textit{First Responder Interface}: An offline-capable web application that uses Web NFC to scan, decompress, and cryptographically verify the patient profile.
+\item \textit{Tag Writer (Admin Panel)}: A password-gated panel within the web client used to generate a patient's key pair and write the signed triage payload to an NFC tag. In the current prototype this gate uses a single shared password rather than per-staff credentials; Section~VIII discusses hardening this for real deployment.
+\item \textit{Passive NFC Wearable}: A wristband or card containing an NTAG215/216 chip that holds the compressed, signed triage record.
+\item \textit{First Responder Interface}: A web application that uses Web NFC to scan, decompress, and cryptographically verify the patient profile, and a separate authenticated Doctor Portal for deep medical records.
 \end{enumerate}
 
 \subsection{NFC Data Layer}
-To store the triage data within passive memory budgets, we define two payload layers:
-\begin{itemize}
-\item \textit{Standard Mode (NTAG215)}: Employs Gzip compression over a shortened JSON format. Field names are mapped to single-character variables (e.g., \texttt{triageData} $\rightarrow$ \texttt{d}, \texttt{bloodGroup} $\rightarrow$ \texttt{b}), and the patient's public key JWK coordinates (\texttt{x}, \texttt{y}) are serialized to a compressed string.
-\item \textit{Ultra-Compact Mode (NTAG213)}: For 144-byte tags, the cryptographic signatures are omitted, and raw shortened JSON text is written directly to the tag, reducing the footprint to $\sim$90 bytes.
-\end{itemize}
+To store the triage data within the passive memory budget of an NTAG215 tag (504 bytes user memory), the payload is Gzip-compressed before being written as an NDEF record. The uncompressed payload includes the patient's name, blood group, allergies, emergency contacts, DNR status, the patient's ECDSA public key (as a JWK), the patient signature over the triage data, and the Healthcare Authority's certifying signature over the public key. The system computes and exposes a byte-budget check (raw size, compressed size, and whether the result fits within 504 bytes) so that a tag write can be rejected before it reaches the hardware.
+
+A lower-memory ``compact'' mode targeting 144-byte NTAG213 tags, in which the cryptographic signatures would be omitted in favor of a bare shortened-JSON identifier, is a design goal for future hardware support (Section~VIII) and is not yet implemented in the current prototype, which targets NTAG215/216 exclusively.
 
 \subsection{Access Control Architecture}
-LifeTag implements Role-Based Access Control (RBAC). Differentiated views are enforced:
+AegisTag implements Role-Based Access Control (RBAC) across three roles --- Patient/User, Doctor, and First Responder --- distinguished at login by a role-prefixed identifier. Differentiated views are enforced:
 \begin{itemize}
-\item \textit{First Responders}: Access only the non-sensitive triage payload (Name, Allergies, Blood Group, DNR, Emergency Contacts) directly from the tag offline.
-\item \textit{Doctors / Physicians}: Authenticate via JSON Web Token (JWT) to access the complete, centralized medical history (e.g., chronic illnesses, surgeries, medications) stored in the database.
+\item \textit{First Responders}: Access only the non-sensitive triage payload (Name, Allergies, Blood Group, DNR, Emergency Contacts) directly from the tag offline, or via an authenticated online lookup when connectivity is available.
+\item \textit{Doctors / Physicians}: Authenticate via JSON Web Token (JWT) to access the complete, centralized medical history (e.g., chronic illnesses, surgeries, medications) stored in the database, subject to the consent gate described below.
 \end{itemize}
+
+\subsection{Consent-Gated Physician Access}
+A doctor's request for a patient's full medical history is authorized by a dedicated consent middleware if, and only if, one of two conditions holds: (1) the requesting doctor is recorded as the patient's primary physician, or (2) the requesting doctor has an audited NFC scan of that patient's tag logged within the preceding 24 hours. Every scan performed by a doctor or first responder is written to a scan audit log (scanning party, patient account, timestamp, and device metadata), which both drives this consent check and provides a retrospective audit trail of who accessed which patient's data and when.
 
 \section{Security Design}
 \subsection{Cryptographic Payload Verification}
 We design a two-tier offline cryptographic verification protocol:
 \begin{enumerate}
-\item \textit{Tier 1: Patient-Tag Binding}: During setup, a unique Elliptic Curve key pair (P-256) is generated locally for the patient. The triage data is signed using the patient's private key. The public key coordinates and signature are stored on the tag.
-\item \textit{Tier 2: Authority Certification}: The patient's public key is signed by the Healthcare Portal's master private key, generating an \texttt{authoritySignature}. When scanned, the reader verifies the patient's signature using the public key on the tag, and then verifies the public key using the master authority public key embedded in the app.
+\item \textit{Tier 1: Patient-Tag Binding}: During tag setup, a unique ECDSA P-256 key pair is generated locally in the patient's browser and stored in IndexedDB with the private key marked non-extractable. The triage data is signed using the patient's private key. The public key coordinates and signature are stored on the tag.
+\item \textit{Tier 2: Authority Certification}: The patient's public key is signed by the Healthcare Authority's master private key (an ECDSA P-256 key loaded from server environment configuration), producing an \texttt{authoritySignature}. When scanned, the reader first verifies the patient's signature over the triage data using the public key on the tag, then verifies that public key's authenticity using a Healthcare Authority public key embedded in the client application.
 \end{enumerate}
+Verification of both signatures is implemented identically on the server (Node.js \texttt{crypto} module) and mirrored in the browser via the Web Crypto API, so that a first responder's device can perform full verification without a network round trip.
 
 \subsection{Key Management}
-The master authority key pair is managed by the server using secure environment variables. Patient key pairs are stored locally in the client browser's \texttt{IndexedDB} store, ensuring the private key never leaves the patient's possession.
+The Healthcare Authority key pair is managed server-side via an environment variable and is never transmitted to clients. Patient key pairs are generated and stored locally in the patient's browser \texttt{IndexedDB} store as non-extractable \texttt{CryptoKey} objects, ensuring the private key is not directly readable by JavaScript, including in the event of an XSS vulnerability, and never leaves the patient's device.
 
-\subsection{JWT and Backend Security}
-All online database operations (profile fetches, audits, benchmark logs) are protected via HTTP-only JWT cookies and audited by appending scan events to a secure \texttt{ScanAuditLog} table.
+\subsection{Session Token Handling}
+Access is governed by a dual-token JWT scheme: short-lived (15 minute) access tokens are issued for API requests, and longer-lived (7 day) refresh tokens are persisted server-side and can be revoked on logout. On the client, both tokens are currently stored in \texttt{localStorage} with a lightweight reversible obfuscation (Base64 encoding of the reversed string) applied before storage. We are explicit that this obfuscation is not a cryptographic protection --- it prevents the token from being casually legible during manual DevTools inspection but offers no defense against script-level access, and is weaker than an HTTP-only cookie, which cannot be read by JavaScript at all. We treat this as a known limitation rather than a completed security control (Section~VIII).
+
+\subsection{Preliminary Post-Quantum Benchmarking Construct}
+To support forward-looking evaluation, the backend includes a simulated Kyber-768 key-encapsulation construct (key generation, encapsulation, and decapsulation) used only for latency benchmarking of a post-quantum handshake shape. It is explicitly a placeholder --- it does not perform real lattice-based cryptography and is not used to protect any live tag or session --- and exists to give early timing intuition ahead of integrating a vetted implementation (e.g., liboqs) in future work.
+
+\subsection{Defensive Engineering}
+All incoming API requests are validated against Zod schemas before reaching controller logic. Authentication routes are rate-limited to mitigate brute-force credential guessing. Passwords are hashed with bcrypt. Fallback development cryptographic keys and destructive operations such as database reseeding are disabled when \texttt{NODE\_ENV=production}, and production error responses are sanitized to avoid leaking stack traces or database structure.
 
 \section{Implementation}
 \subsection{Hardware}
-The system was evaluated using:
+The system targets:
 \begin{itemize}
-\item \textit{Transponders}: NTAG213 (144 bytes user memory) and NTAG215 (504 bytes user memory) passive ISO/IEC 14443 Type A tags.
-\item \textit{Reader Devices}: Google Pixel 6 smartphone running Android 13 with an integrated Broadcom NFC controller.
+\item \textit{Transponders}: NTAG215/216 passive ISO/IEC 14443 Type A tags (504 bytes user memory), addressed via the W3C Web NFC \texttt{NDEFReader}/\texttt{NDEFWriter} interfaces.
+\item \textit{Reader Devices}: Any Web NFC-capable Chromium-based Android smartphone.
 \end{itemize}
 
 \subsection{Software Stack}
-The backend was developed using Node.js, Express, and Prisma ORM connected to a PostgreSQL database. The frontend was built with React, Vite, TailwindCSS, and the browser-native Web NFC API (\texttt{NDEFReader}).
+The backend is implemented in Node.js and Express with TypeScript, using Prisma ORM against a PostgreSQL database, Zod for request validation, and bcrypt for password hashing. The frontend is a React 18 / Vite 5 / TypeScript single-page application styled with Tailwind CSS and Radix UI (via shadcn/ui) primitives, using TanStack React Query for server-state management and the browser-native Web NFC and Web Crypto APIs for tag I/O and signing.
 
 \section{Experimental Methodology}
-We conducted 100 simulated and physical test runs to measure:
+To evaluate AegisTag we propose measuring, using the system's built-in \texttt{/api/v1/benchmarks} endpoint and \texttt{BenchmarkLog} table (which record operation type, raw and compressed payload size, elapsed time, and device metadata for each run):
 \begin{enumerate}
 \item \textit{Execution Latency}: Time taken for ECDSA key generation, signature creation, Gzip compression, decompression, and signature verification.
-\item \textit{Payload Size}: Comparison of raw JSON size, compact JSON size, and Gzip-compressed sizes.
-\item \textit{NFC Operation Time}: The physical latency involved in performing `write` and `read` handshakes over NFC RF fields.
+\item \textit{Payload Size}: Comparison of raw JSON size, and Gzip-compressed size against the 504-byte NTAG215 budget.
+\item \textit{NFC Operation Time}: The physical latency of \texttt{write} and \texttt{read} handshakes over the NFC RF field, measured on-device via the Web NFC API.
+\item \textit{Tamper Detection Rate}: The proportion of deliberately corrupted payloads correctly rejected by the two-tier verification routine.
 \end{enumerate}
 
 \section{Results and Discussion}
+\textit{\textbf{[TODO --- pending data collection.]} The tables and figures below are structural placeholders showing the intended reporting format. They should be populated with measurements collected by running the benchmark suite against physical NTAG215/216 hardware and the deployed backend before submission; no results in this section should be treated as final until replaced with measured values.}
+
 \subsection{Emergency Access Latency}
-The total latency to display the patient's triage profile is divided into processing time and hardware transmission time. The preprocessing time on the reader device (Gzip decompression and ECDSA verification) averaged just \textbf{0.158 ms}, ensuring instant availability.
+\textit{[TODO: report mean/median preprocessing time --- Gzip decompression plus ECDSA verification --- on the reader device, across $N$ runs.]}
 
 \subsection{NFC Reliability}
-Physical read/write operations were completed over a distance of 1--3 cm. Web NFC write handshakes averaged \textbf{185 ms} for NTAG215 and \textbf{120 ms} for NTAG213. NFC read handshakes averaged \textbf{95 ms}.
+\textit{[TODO: report mean read and write handshake latency over the effective NFC read range (typically 1--4 cm), across $N$ physical trials, with tag orientation and shielding noted.]}
 
 \subsection{Cryptographic Overhead}
-Table~\ref{tab:crypto_times} summarizes the execution latency for the cryptographic operations. The sub-millisecond execution times demonstrate that asymmetric verification is highly feasible on modern mobile browsers.
+Table~\ref{tab:crypto_times} shows the intended reporting format for cryptographic and compression latency; values are placeholders pending real measurement.
 
 \begin{table}[htbp]
-\caption{Cryptographic and Compression Latency (100 Runs)}
+\caption{Cryptographic and Compression Latency --- Reporting Template (TODO: replace with measured values)}
 \begin{center}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Operation} & \textbf{p50 (ms)} & \textbf{p95 (ms)} & \textbf{p99 (ms)} \\
+\textbf{Operation} & \textbf{Avg (ms)} & \textbf{Min (ms)} & \textbf{Max (ms)} \\
 \midrule
-ECDSA P-256 Key Generation & 0.050 & 0.208 & 0.244 \\
-ECDSA P-256 Signing & 0.045 & 0.161 & 0.315 \\
-ECDSA P-256 Verification & 0.140 & 0.511 & 0.629 \\
-Gzip Compression & 0.059 & 0.265 & 0.867 \\
-Gzip Decompression & 0.030 & 0.210 & 1.213 \\
-Kyber-768 Encapsulation & 0.007 & 0.019 & 0.052 \\
-Kyber-768 Decapsulation & 0.006 & 0.043 & 0.103 \\
+Key Generation & TODO & TODO & TODO \\
+Signature Creation & TODO & TODO & TODO \\
+Signature Verification & TODO & TODO & TODO \\
+Gzip Compression & TODO & TODO & TODO \\
+Gzip Decompression & TODO & TODO & TODO \\
 \bottomrule
 \end{tabular}
 \label{tab:crypto_times}
@@ -192,18 +213,16 @@ Kyber-768 Decapsulation & 0.006 & 0.043 & 0.103 \\
 \end{table}
 
 \subsection{Payload Capacity Results}
-Table~\ref{tab:payload_sizes} shows the payload size across Small, Medium, and Large profile distributions. The final application payload footprint is evaluated after applying the full serialization pipeline (\texttt{toShortFormat} $\rightarrow$ Gzip $\rightarrow$ Base64 $\rightarrow$ ``gzip:'' prefix) and before accounting for standard NDEF wrapper overhead. The Small (397 B) and Medium (457 B) profiles successfully fit within the 504-byte NTAG215 budget. However, the Large profile (601 B) exceeds the configured 504-byte NTAG215 payload budget.
+Table~\ref{tab:payload_sizes} shows the intended reporting format for payload size against the NTAG215 504-byte budget; values are placeholders.
 
 \begin{table}[htbp]
-\caption{Payload Size Comparison (Bytes)}
+\caption{Payload Size --- Reporting Template (TODO: replace with measured values)}
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
-\textbf{Profile Size} & \textbf{Final Payload (B)} & \textbf{Fits Configured 504-B Payload Budget} \\
+\textbf{Mode} & \textbf{Raw JSON (bytes)} & \textbf{Gzip (bytes)} \\
 \midrule
-Small & 397 & Yes \\
-Medium & 457 & Yes \\
-Large & 601 & No \\
+Standard Mode (NTAG215) & TODO & TODO \\
 \bottomrule
 \end{tabular}
 \label{tab:payload_sizes}
@@ -211,26 +230,37 @@ Large & 601 & No \\
 \end{table}
 
 \subsection{Tampering Detection}
-To validate tampering detection, we simulated payload modification by altering triage data across 100 maliciously mutated payloads. The verification engine correctly identified and rejected all 100 mutations (0 missed), achieving a 100\% detection rate and confirming the offline cryptographic integrity model.
+\textit{[TODO: report the fraction of single-character-altered payloads correctly flagged as verification failures across $N$ trials.]}
 
 \subsection{Discussion}
-Our results show that key shortening and data packing are essential for deploying asymmetric cryptography on cheap passive tags. By using ECDSA and Gzip, we achieved a size reduction of **45.7\%** in compact mode, solving the storage constraints of NTAG213/215.
+Once populated, this section should discuss whether Gzip compression alone is sufficient to keep signed payloads within the NTAG215 budget across a realistic distribution of patient data (e.g., patients with many allergies or emergency contacts), and whether cryptographic overhead remains negligible relative to physical NFC handshake time.
 
 \section{Comparative Evaluation}
-Compared to identifier-only NFC healthcare systems, LifeTag provides true offline availability of clinical profiles. Unlike QR codes, LifeTag is immune to visual cloning and wear, and unlike USB-based systems, it does not expose responders' devices to malware.
+Compared to identifier-only NFC healthcare systems, AegisTag provides true offline availability of clinical triage profiles. Unlike QR codes, AegisTag is immune to visual cloning and wear, and unlike USB-based systems, it does not expose responders' devices to malware. Compared to systems that treat any authenticated clinician as authorized for full record access, AegisTag additionally scopes deep medical-record access to a primary-physician relationship or a recent, audited scan, narrowing the set of clinicians who can view a given patient's full history at any point in time.
 
 \section{Limitations}
-While LifeTag is offline-resilient, its security relies on the secrecy of the Healthcare Portal's master private key. If the master key is compromised, an adversary could generate spoofed tags that verify as authentic. Additionally, Web NFC is currently only supported in Chromium-based mobile browsers, leaving iOS Safari users dependent on native apps.
+\begin{itemize}
+\item AegisTag's tag-level security relies on the secrecy of the Healthcare Authority's master private key. If the master key is compromised, an adversary could generate spoofed tags that verify as authentic.
+\item Client-side session tokens are currently stored in \texttt{localStorage} with reversible obfuscation rather than in HTTP-only cookies or another mechanism resistant to script-level exfiltration; this is a known gap rather than a completed protection.
+\item The tag-writing admin panel in the current prototype is gated by a single shared password rather than per-staff authenticated accounts, which is insufficient for a real multi-clinician deployment.
+\item The described 144-byte NTAG213 ``compact'' mode is a design target, not yet implemented; the current system supports NTAG215/216 only.
+\item Web NFC is currently only supported in Chromium-based mobile browsers, leaving iOS Safari users dependent on a native app or companion reader.
+\item The Kyber-768 construct used for benchmarking is a simulated placeholder and provides no real post-quantum security guarantee.
+\end{itemize}
 
 \section{Future Work}
-Future research will investigate:
+Future research and engineering will investigate:
 \begin{itemize}
-\item Integrating post-quantum cryptographic signatures (e.g., SPHINCS+) designed for embedded devices.
-\item Developing automated synchronization protocols between index databases and local caches when connectivity is restored.
+\item Replacing the simulated Kyber-768 benchmarking construct with a vetted post-quantum implementation (e.g., via liboqs) for the authority-certification handshake.
+\item Implementing the 144-byte Ultra-Compact NTAG213 mode, including a defined fallback behavior when cryptographic signatures must be omitted.
+\item Replacing the single shared admin password for tag writing with per-staff WebAuthn/FIDO2 authentication, as outlined in the project roadmap.
+\item Moving client session tokens from obfuscated \texttt{localStorage} to HTTP-only, \texttt{SameSite}-restricted cookies.
+\item Packaging the client as an installable PWA with offline scan-history synchronization.
+\item Running the proposed benchmarking methodology (Section VI) end-to-end on physical NTAG215/216 hardware to populate Section VII with measured results.
 \end{itemize}
 
 \section{Conclusion}
-We presented LifeTag, an offline-resilient, secure, and decentralized emergency medical information system using passive NFC tags and Web NFC. By combining ECDSA two-tier verification, key-shortening properties, and Gzip compression, LifeTag stores authentic triage records directly on patient wearables. Experimental results show that LifeTag achieves a 45.7\% payload size reduction with sub-millisecond cryptographic overhead, making it highly suitable for emergency first responders.
+We presented AegisTag, an offline-resilient, decentralized emergency medical information system built on passive NFC tags and the Web NFC API. By combining two-tier ECDSA verification, IndexedDB-resident non-extractable patient keys, Gzip payload compression, and a consent-gated model for elevating physician access to full medical histories, AegisTag stores authentic triage records directly on patient wearables while keeping deep medical data behind an auditable access policy. We have outlined a reproducible benchmarking methodology built on the system's own logging infrastructure and identified concrete engineering gaps --- token storage, admin authentication, and compact-tag support --- to be closed before the system is suitable for real clinical deployment.
 
 \section*{Acknowledgment}
 The authors would like to thank PES University for providing the hardware testbed and computational facilities to conduct this research.

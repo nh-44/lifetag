@@ -16,6 +16,7 @@ import MedicalInfo from "@/pages/MedicalInfo";
 import MyContacts from "@/pages/MyContacts";
 import MyDoctor from "@/pages/MyDoctor";
 import TagTracer from "@/pages/TagTracer";
+import BenchNfc from "@/pages/BenchNfc";
 import AccountInfo from "@/pages/AccountInfo";
 import Unauthorized from "@/pages/Unauthorized";
 import NotFound from "@/pages/NotFound";
@@ -43,6 +44,7 @@ const App = () => (
                 <Route path="/my-contacts" element={<MyContacts />} />
                 <Route path="/my-doctor" element={<MyDoctor />} />
                 <Route path="/tag-tracer" element={<TagTracer />} />
+                <Route path="/bench/nfc" element={<BenchNfc />} />
                 <Route path="/account-info" element={<AccountInfo />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
                 <Route path="/:accountId" element={<Login />} />
