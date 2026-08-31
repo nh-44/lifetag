@@ -103,3 +103,12 @@ Built to collect all three:
 - Also asks the human to record the physical tag's per-unit cost in ₹, needed for the paper's "low-cost" claim — not something this session can look up or estimate.
 
 **No number from any of these three measurements will be written into the paper until the corresponding file exists in `results/`.** Phase 7's results-independent correctness and structural fixes can proceed in parallel while this data is collected.
+
+## 2026-08-31 — BenchNfc page simplified and fixed for real Vercel+Render deployment
+
+The user is deploying the client to Vercel and the server to Render themselves (rather than using the ngrok/local-tunnel path originally suggested) and asked for the `/bench/nfc` page and instructions to be kept simple. Two changes made before handoff:
+
+- **Bug fix**: the page's "POST all to backend" button used a made-up env var (`VITE_API_BASE_URL`) and manually appended `/api/v1/benchmarks/log`, which doesn't match this codebase's actual convention — the real env var is `VITE_API_URL` and it already includes the `/api/v1` prefix (see `client/src/services/api.ts`). Fixed by dropping the hand-rolled `fetch` entirely and reusing the existing `logBenchmarkTelemetry` helper from `api.ts`, the same function the production `NfcWriter`/`NfcScanner` components already use — this both fixes the bug and removes a second, parallel implementation of the same request.
+- **Simplified per explicit request**: removed the distance/orientation/material dropdown grid (over-engineered for a single-operator, single-tag test session) in favor of one optional free-text "note" field; removed the manual "retries so far" number input in favor of an auto-tracked counter (increments on failure, resets on success). Device info, tag-cost field, CSV export, backend POST, and the mobile crypto-latency benchmark are unchanged.
+- `NFC_PROTOCOL.md` rewritten to match: real Vercel/Render environment-variable configuration (`VITE_API_URL` on Vercel, `CORS_ORIGIN`/`DATABASE_URL`/`JWT_SECRET`/`AUTHORITY_PRIVATE_KEY`/`NODE_ENV` on Render, plus the one-time `prisma migrate deploy` step) in place of the original ngrok/Vercel-as-alternative framing, and the trial-count guidance simplified to "~50 read + ~50 write at normal tapping distance" instead of a multi-condition factorial plan.
+- Re-verified after the rewrite: `npx tsc --noEmit` clean on the new file, `npm run build` (client) succeeds, full client test suite still 49/49 passing.

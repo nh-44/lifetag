@@ -1,26 +1,17 @@
 import { useEffect, useState } from "react";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
+import { logBenchmarkTelemetry } from "@/services/api";
 
 /**
- * Phase 5 (+ the mobile halves of Phase 3 and Phase 6) data-collection page.
- * Not part of the patient-facing product — a QA/benchmark tool for physically
- * measuring what only a real Android+Chrome device and a real NTAG21x tag
- * can produce: NFC read/write handshake latency across distance/orientation/
- * material conditions, Web Crypto latency on real mobile hardware, and the
- * true tap-to-rendered-on-screen time for the signed verification path.
- * See NFC_PROTOCOL.md for how to reach this page on a phone and the
- * recommended trial plan.
+ * Bench: NFC Physical Trials — a simple QA page (not patient-facing) for
+ * collecting the one kind of data that can't be measured from a desktop:
+ * real NFC read/write handshake timing and real mobile Web Crypto timing.
+ * See NFC_PROTOCOL.md for how to use it.
  */
-
-const DISTANCES = ["0.5cm", "1cm", "2cm", "3cm", "4cm"] as const;
-const ORIENTATIONS = ["coplanar", "45deg", "perpendicular"] as const;
-const MATERIALS = ["bare", "phone case", "fabric"] as const;
 
 interface NfcTrial {
   trialType: "read" | "write";
-  distance: string;
-  orientation: string;
-  material: string;
+  note: string;
   success: boolean;
   retryCount: number;
   handshakeMs: number | null; // tap -> payload available (read) / tap -> write complete (write)
@@ -32,7 +23,6 @@ interface DeviceInfo {
   model: string;
   androidVersion: string;
   chromeVersion: string;
-  manuallyEntered: boolean;
 }
 
 interface LatencyStats {
@@ -54,29 +44,22 @@ async function detectDeviceInfo(): Promise<DeviceInfo> {
   const ua = navigator.userAgent;
   const chromeMatch = ua.match(/Chrome\/([\d.]+)/);
   const androidMatch = ua.match(/Android ([\d.]+)/);
-  let model = "unknown (enter manually)";
+  let model = "";
   try {
     // @ts-ignore - Chrome-only User-Agent Client Hints API
     if (navigator.userAgentData?.getHighEntropyValues) {
       // @ts-ignore
-      const hints = await navigator.userAgentData.getHighEntropyValues(["model", "platformVersion"]);
+      const hints = await navigator.userAgentData.getHighEntropyValues(["model"]);
       if (hints.model) model = hints.model;
     }
   } catch { /* fall through to manual entry */ }
 
-  return {
-    model,
-    androidVersion: androidMatch?.[1] ?? "unknown (enter manually)",
-    chromeVersion: chromeMatch?.[1] ?? "unknown (enter manually)",
-    manuallyEntered: false,
-  };
+  return { model, androidVersion: androidMatch?.[1] ?? "", chromeVersion: chromeMatch?.[1] ?? "" };
 }
 
 const BenchNfc = () => {
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>({ model: "", androidVersion: "", chromeVersion: "", manuallyEntered: false });
-  const [distance, setDistance] = useState<string>(DISTANCES[1]);
-  const [orientation, setOrientation] = useState<string>(ORIENTATIONS[0]);
-  const [material, setMaterial] = useState<string>(MATERIALS[0]);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>({ model: "", androidVersion: "", chromeVersion: "" });
+  const [note, setNote] = useState("1cm, flat, bare tag");
   const [retryCount, setRetryCount] = useState(0);
   const [trials, setTrials] = useState<NfcTrial[]>([]);
   const [status, setStatus] = useState("");
@@ -100,10 +83,13 @@ const BenchNfc = () => {
     localStorage.setItem("bench_nfc_trials", JSON.stringify(next));
   };
 
-  const recordTrial = (trial: NfcTrial) => persist([...trials, trial]);
+  const recordTrial = (trial: NfcTrial) => {
+    persist([...trials, trial]);
+    setRetryCount(trial.success ? 0 : retryCount + 1); // auto-tracks retries: resets on success
+  };
 
   const runReadTrial = async () => {
-    setStatus("Hold a written test tag near the device now...");
+    setStatus("Hold the written tag near the phone now...");
     try {
       // @ts-ignore
       const ndef = new NDEFReader();
@@ -130,15 +116,14 @@ const BenchNfc = () => {
             if (payload) await NfcCryptoService.verifyTagIntegrity(payload); // Tier 1 (+ Tier 2 if authority-signed)
 
             // Commit to DOM and wait one animation frame to approximate paint completion —
-            // this is the closest a web page can get to "rendered on screen" without a
-            // native profiler.
-            setStatus(`Rendered: ${payload?.triageData?.name ?? "(no payload)"}`);
+            // the closest a web page can get to "rendered on screen" without a native profiler.
+            setStatus(`Rendered: ${payload?.triageData?.name ?? "(no payload found on tag)"}`);
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
             const tapToRenderMs = performance.now() - tapStart;
 
             clearTimeout(timeout);
             controller.abort();
-            recordTrial({ trialType: "read", distance, orientation, material, success: true, retryCount, handshakeMs, tapToRenderMs, timestamp: new Date().toISOString() });
+            recordTrial({ trialType: "read", note, success: true, retryCount, handshakeMs, tapToRenderMs, timestamp: new Date().toISOString() });
             resolve();
           } catch (e) {
             clearTimeout(timeout);
@@ -151,13 +136,13 @@ const BenchNfc = () => {
       });
       setStatus("Read trial recorded.");
     } catch (e: any) {
-      recordTrial({ trialType: "read", distance, orientation, material, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
+      recordTrial({ trialType: "read", note, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
       setStatus(`Read trial FAILED: ${e.message}`);
     }
   };
 
   const runWriteTrial = async () => {
-    setStatus("Hold a blank/rewritable test tag near the device now...");
+    setStatus("Hold the blank tag near the phone now...");
     try {
       const payload = await NfcCryptoService.generateTagPayload({
         name: "Bench Test Patient", bloodGroup: "O-Positive", allergies: ["Penicillin"],
@@ -175,10 +160,10 @@ const BenchNfc = () => {
       await ndef.write({ records: [{ recordType: "text", data: text, lang: "en" }] });
       const handshakeMs = performance.now() - tapStart;
 
-      recordTrial({ trialType: "write", distance, orientation, material, success: true, retryCount, handshakeMs, tapToRenderMs: null, timestamp: new Date().toISOString() });
+      recordTrial({ trialType: "write", note, success: true, retryCount, handshakeMs, tapToRenderMs: null, timestamp: new Date().toISOString() });
       setStatus(`Write trial recorded (${handshakeMs.toFixed(1)} ms).`);
     } catch (e: any) {
-      recordTrial({ trialType: "write", distance, orientation, material, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
+      recordTrial({ trialType: "write", note, success: false, retryCount, handshakeMs: null, tapToRenderMs: null, timestamp: new Date().toISOString() });
       setStatus(`Write trial FAILED: ${e.message}`);
     }
   };
@@ -250,8 +235,8 @@ const BenchNfc = () => {
   };
 
   const downloadCsv = () => {
-    const headers = ["trialType", "distance", "orientation", "material", "success", "retryCount", "handshakeMs", "tapToRenderMs", "timestamp"];
-    const rows = trials.map((t) => headers.map((h) => (t as any)[h]).join(","));
+    const headers = ["trialType", "note", "success", "retryCount", "handshakeMs", "tapToRenderMs", "timestamp"];
+    const rows = trials.map((t) => headers.map((h) => JSON.stringify((t as any)[h] ?? "")).join(","));
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -261,60 +246,41 @@ const BenchNfc = () => {
   };
 
   const postTrialsToBenchmarkEndpoint = async () => {
-    setStatus(`Posting ${trials.length} trials to /api/v1/benchmarks/log...`);
-    const base = (import.meta as any).env?.VITE_API_BASE_URL || "";
-    let ok = 0, fail = 0;
+    setStatus(`Posting ${trials.length} trials to the backend...`);
+    let ok = 0;
     for (const t of trials) {
-      try {
-        await fetch(`${base}/api/v1/benchmarks/log`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            operation: t.trialType.toUpperCase(),
-            payloadSizeRaw: 0, payloadSizeCompressed: 0,
-            timeElapsedMs: t.handshakeMs ?? -1,
-            deviceMeta: `distance=${t.distance};orientation=${t.orientation};material=${t.material};success=${t.success};retries=${t.retryCount};tapToRenderMs=${t.tapToRenderMs ?? "n/a"};device=${deviceInfo.model};android=${deviceInfo.androidVersion};chrome=${deviceInfo.chromeVersion}`,
-          }),
-        });
-        ok++;
-      } catch { fail++; }
+      const res = await logBenchmarkTelemetry({
+        operation: t.trialType.toUpperCase() as "READ" | "WRITE",
+        payloadSizeRaw: 0,
+        payloadSizeCompressed: 0,
+        timeElapsedMs: t.handshakeMs ?? -1,
+        deviceMeta: `note=${t.note};success=${t.success};retries=${t.retryCount};tapToRenderMs=${t.tapToRenderMs ?? "n/a"};device=${deviceInfo.model};android=${deviceInfo.androidVersion};chrome=${deviceInfo.chromeVersion}`,
+      });
+      if ((res as any)?.success !== false) ok++;
     }
-    setStatus(`Posted ${ok} trials (${fail} failed).`);
-  };
-
-  const countsByCondition = () => {
-    const counts: Record<string, number> = {};
-    for (const t of trials) {
-      const key = `${t.trialType}|${t.distance}|${t.orientation}|${t.material}`;
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    return counts;
+    setStatus(`Posted ${ok}/${trials.length} trials to the backend.`);
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Bench: NFC Physical Trials (Phase 5)</h1>
-      <p className="text-sm text-slate-600">Not patient-facing. See NFC_PROTOCOL.md for the full operator procedure.</p>
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Bench: NFC Physical Trials</h1>
+      <p className="text-sm text-slate-600">Not patient-facing — a simple QA page. See NFC_PROTOCOL.md for the full procedure.</p>
 
       {isNfcSupported === false && (
-        <div className="p-3 bg-red-100 text-red-800 rounded">Web NFC is not available in this browser. Use Chrome for Android over a secure context (HTTPS or localhost).</div>
+        <div className="p-3 bg-red-100 text-red-800 rounded">Web NFC is not available. Use Chrome for Android, and make sure this page loaded over HTTPS.</div>
       )}
 
       <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Device info (auto-detected — edit if wrong/unknown)</h2>
-        <label className="block text-sm">Model: <input className="border px-2 py-1 ml-2 w-64" value={deviceInfo.model} onChange={(e) => setDeviceInfo({ ...deviceInfo, model: e.target.value, manuallyEntered: true })} /></label>
-        <label className="block text-sm">Android version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.androidVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, androidVersion: e.target.value, manuallyEntered: true })} /></label>
-        <label className="block text-sm">Chrome version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.chromeVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, chromeVersion: e.target.value, manuallyEntered: true })} /></label>
+        <h2 className="font-semibold">Device info (auto-detected — edit if blank/wrong)</h2>
+        <label className="block text-sm">Model: <input className="border px-2 py-1 ml-2 w-64" value={deviceInfo.model} onChange={(e) => setDeviceInfo({ ...deviceInfo, model: e.target.value })} placeholder="e.g. Pixel 7" /></label>
+        <label className="block text-sm">Android version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.androidVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, androidVersion: e.target.value })} /></label>
+        <label className="block text-sm">Chrome version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.chromeVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, chromeVersion: e.target.value })} /></label>
         <label className="block text-sm">Tag unit cost (₹): <input className="border px-2 py-1 ml-2 w-32" value={tagCostInr} onChange={(e) => setTagCostInr(e.target.value)} placeholder="e.g. 25" /></label>
       </section>
 
       <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Trial condition (set before each tap)</h2>
-        <div className="flex gap-4 flex-wrap">
-          <label>Distance: <select className="border px-2 py-1 ml-1" value={distance} onChange={(e) => setDistance(e.target.value)}>{DISTANCES.map((d) => <option key={d}>{d}</option>)}</select></label>
-          <label>Orientation: <select className="border px-2 py-1 ml-1" value={orientation} onChange={(e) => setOrientation(e.target.value)}>{ORIENTATIONS.map((o) => <option key={o}>{o}</option>)}</select></label>
-          <label>Material: <select className="border px-2 py-1 ml-1" value={material} onChange={(e) => setMaterial(e.target.value)}>{MATERIALS.map((m) => <option key={m}>{m}</option>)}</select></label>
-          <label>Retries so far: <input type="number" min={0} className="border px-2 py-1 ml-1 w-16" value={retryCount} onChange={(e) => setRetryCount(Number(e.target.value))} /></label>
-        </div>
+        <h2 className="font-semibold">Run a trial</h2>
+        <label className="block text-sm">Note (optional — e.g. distance/orientation if you want to vary it): <input className="border px-2 py-1 ml-2 w-64" value={note} onChange={(e) => setNote(e.target.value)} /></label>
         <div className="flex gap-3 mt-2">
           <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={runReadTrial}>Run READ trial</button>
           <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={runWriteTrial}>Run WRITE trial</button>
@@ -323,19 +289,16 @@ const BenchNfc = () => {
       </section>
 
       <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Recorded trials: {trials.length}</h2>
-        <div className="text-xs text-slate-600 max-h-40 overflow-auto">
-          {Object.entries(countsByCondition()).map(([k, v]) => <div key={k}>{k}: {v}</div>)}
-        </div>
+        <h2 className="font-semibold">Recorded trials: {trials.length} ({trials.filter((t) => t.trialType === "read").length} read, {trials.filter((t) => t.trialType === "write").length} write, {trials.filter((t) => !t.success).length} failed)</h2>
         <div className="flex gap-3">
           <button className="border px-3 py-1 rounded" onClick={downloadCsv}>Export CSV</button>
-          <button className="border px-3 py-1 rounded" onClick={postTrialsToBenchmarkEndpoint}>POST all to /api/v1/benchmarks/log</button>
-          <button className="border px-3 py-1 rounded text-red-700" onClick={() => { persist([]); }}>Clear all trials</button>
+          <button className="border px-3 py-1 rounded" onClick={postTrialsToBenchmarkEndpoint}>POST all to backend</button>
+          <button className="border px-3 py-1 rounded text-red-700" onClick={() => persist([])}>Clear all trials</button>
         </div>
       </section>
 
       <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Mobile crypto/compression latency (Phase 3 mobile half)</h2>
+        <h2 className="font-semibold">Mobile crypto/compression latency</h2>
         <button className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-50" onClick={runMobileCryptoLatency} disabled={cryptoRunning}>
           {cryptoRunning ? "Running (100 iterations)..." : "Run crypto latency benchmark"}
         </button>
