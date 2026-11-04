@@ -81,7 +81,7 @@ const MedicalInfo = () => {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lifetag-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aegistag-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading medical information...</p>
         </div>
       </div>
@@ -93,7 +93,7 @@ const MedicalInfo = () => {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Complete Medical Information</h1>
-          <Badge className="bg-lifetag-primary">Doctor View</Badge>
+          <Badge className="bg-aegistag-primary">Doctor View</Badge>
         </div>
         
         {error ? (
@@ -105,13 +105,8 @@ const MedicalInfo = () => {
         
         {profile && (
           <>
-            <TrustBadge
-              status={
-                profile.authoritySignature
-                  ? 'authority-certified'
-                  : 'server-verified'
-              }
-            />
+            {/* Data from the authenticated API, not a verified tag: never badge it "Authority Certified". */}
+            <TrustBadge status="server-verified" />
           <Tabs defaultValue="emergency" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="emergency">Emergency Information</TabsTrigger>
@@ -121,7 +116,7 @@ const MedicalInfo = () => {
             {/* Emergency Info Tab */}
             <TabsContent value="emergency" className="space-y-6">
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle className="flex items-center">
                     <CheckCircle2 className="h-5 w-5 mr-2 text-green-600" />
                     Patient Information
@@ -201,7 +196,7 @@ const MedicalInfo = () => {
               </div>
               
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle>Emergency Contacts</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
@@ -229,7 +224,7 @@ const MedicalInfo = () => {
               </Card>
               
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle>Medical Information</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
@@ -254,9 +249,9 @@ const MedicalInfo = () => {
             <TabsContent value="medical" className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
-                  <CardHeader className="bg-lifetag-light">
+                  <CardHeader className="bg-aegistag-light">
                     <CardTitle className="flex items-center">
-                      <Activity className="h-5 w-5 mr-2 text-lifetag-primary" />
+                      <Activity className="h-5 w-5 mr-2 text-aegistag-primary" />
                       Lifestyle
                     </CardTitle>
                   </CardHeader>
@@ -279,9 +274,9 @@ const MedicalInfo = () => {
                 </Card>
                 
                 <Card>
-                  <CardHeader className="bg-lifetag-light">
+                  <CardHeader className="bg-aegistag-light">
                     <CardTitle className="flex items-center">
-                      <Activity className="h-5 w-5 mr-2 text-lifetag-primary" />
+                      <Activity className="h-5 w-5 mr-2 text-aegistag-primary" />
                       Last Physical Checkup
                     </CardTitle>
                   </CardHeader>
@@ -317,9 +312,9 @@ const MedicalInfo = () => {
               </div>
               
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle className="flex items-center">
-                    <Pill className="h-5 w-5 mr-2 text-lifetag-primary" />
+                    <Pill className="h-5 w-5 mr-2 text-aegistag-primary" />
                     Current Medications
                   </CardTitle>
                 </CardHeader>
@@ -337,9 +332,9 @@ const MedicalInfo = () => {
               </Card>
               
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle className="flex items-center">
-                    <AlertCircle className="h-5 w-5 mr-2 text-lifetag-primary" />
+                    <AlertCircle className="h-5 w-5 mr-2 text-aegistag-primary" />
                     Current Illnesses or Disorders
                   </CardTitle>
                 </CardHeader>
@@ -357,9 +352,9 @@ const MedicalInfo = () => {
               </Card>
               
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle className="flex items-center">
-                    <History className="h-5 w-5 mr-2 text-lifetag-primary" />
+                    <History className="h-5 w-5 mr-2 text-aegistag-primary" />
                     Medical History
                   </CardTitle>
                 </CardHeader>

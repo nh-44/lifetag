@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AdminPanel from '@/components/nfc/AdminPanel';
 
@@ -23,121 +23,52 @@ vi.mock('@/components/nfc/NfcWriter', () => ({
   )
 }));
 
+let mockRole: string | null = null;
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ currentUser: mockRole ? { userId: 'X1', name: 'X', role: mockRole } : null }),
+}));
+
 describe('AdminPanel', () => {
   const mockOnWriteComplete = vi.fn();
   const mockOnAuthChange = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRole = null;
   });
 
-  it('renders initial admin button', () => {
+  const open = () => {
     render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    expect(screen.getByRole('button', { name: /Admin/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Issue Tag/i }));
+  };
+
+  it('has no password field: access follows the logged-in account', () => {
+    mockRole = 'DOCTOR';
+    open();
+    expect(screen.queryByPlaceholderText(/password/i)).not.toBeInTheDocument();
   });
 
-  it('opens dialog and shows login form', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    
-    expect(screen.getByTestId('dialog-title')).toHaveTextContent('Admin Login');
-    expect(screen.getByPlaceholderText('Enter admin password')).toBeInTheDocument();
-  });
-
-  it('shows error on invalid password', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    
-    const input = screen.getByPlaceholderText('Enter admin password');
-    fireEvent.change(input, { target: { value: 'wrong' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-    
-    expect(screen.getByText('Invalid password')).toBeInTheDocument();
-    expect(mockOnAuthChange).not.toHaveBeenCalled();
-  });
-
-  it('authenticates with correct password and mounts NfcWriter', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    
-    const input = screen.getByPlaceholderText('Enter admin password');
-    fireEvent.change(input, { target: { value: '00000' } }); // Mock password
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-    
+  it('mounts NfcWriter for a DOCTOR session and reports issuer access', () => {
+    mockRole = 'DOCTOR';
+    open();
     expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
     expect(mockOnAuthChange).toHaveBeenCalledWith(true);
   });
 
-  it('handles write success callback from NfcWriter', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-    
+  it.each([['FIRST_RESPONDER'], ['USER'], [null]])('refuses the writer for role %s', (role) => {
+    mockRole = role;
+    open();
+    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
+    expect(screen.getByTestId('dialog-title')).toHaveTextContent('Clinician Access Required');
+    expect(mockOnAuthChange).toHaveBeenCalledWith(false);
+  });
+
+  it('handles write success callback from NfcWriter and closes the dialog', () => {
+    mockRole = 'DOCTOR';
+    open();
     fireEvent.click(screen.getByText('Mock Write'));
-    
+
     expect(mockOnWriteComplete).toHaveBeenCalledWith('12345');
-    // The dialog should close automatically after successful write
     expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
-  });
-
-  it('authenticates when pressing Enter key on password input', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    
-    const input = screen.getByPlaceholderText('Enter admin password');
-    fireEvent.change(input, { target: { value: '00000' } });
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-    
-    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
-  });
-
-  it('handles logout and clears authentication', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-    
-    // Auth success
-    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
-    
-    // Click Logout
-    fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
-    
-    // Dialog closes
-    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
-    expect(mockOnAuthChange).toHaveBeenCalledWith(false);
-  });
-
-  it('handles dialog close without authenticating', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    
-    expect(screen.getByPlaceholderText('Enter admin password')).toBeInTheDocument();
-    
-    // Close dialog
-    fireEvent.click(screen.getByTestId('dialog-close-mock'));
-    
-    expect(screen.queryByPlaceholderText('Enter admin password')).not.toBeInTheDocument();
-    expect(mockOnAuthChange).toHaveBeenCalledWith(false);
-  });
-
-  it('handles dialog close while authenticated', () => {
-    render(<AdminPanel onWriteComplete={mockOnWriteComplete} onAuthChange={mockOnAuthChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /Admin/i }));
-    fireEvent.change(screen.getByPlaceholderText('Enter admin password'), { target: { value: '00000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-    
-    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
-    
-    // Close dialog
-    fireEvent.click(screen.getByTestId('dialog-close-mock'));
-    
-    // Should still be authenticated for next time it opens
-    expect(screen.queryByTestId('mock-nfc-writer')).not.toBeInTheDocument();
-    
-    // Re-open
-    fireEvent.click(screen.getByRole('button', { name: /Admin Panel/i }));
-    expect(screen.getByTestId('mock-nfc-writer')).toBeInTheDocument();
   });
 });

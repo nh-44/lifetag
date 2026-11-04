@@ -6,7 +6,9 @@ import { ErrorCodes } from '../constants/errorCodes';
 export const validate = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      // Replace the body with the parsed value: unknown keys are stripped here, so a
+      // controller can never receive fields the schema did not allow (mass assignment).
+      req.body = schema.parse(req.body);
       next();
     } catch (error) {
       if (error instanceof ZodError) {

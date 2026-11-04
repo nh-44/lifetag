@@ -1,0 +1,27 @@
+\begin{table}[htbp]
+\caption{Tamper Detection, 2600 Trials (measured). A trial is accepted only if the tag is authority-certified and the patient's current issuance.}
+\begin{center}
+\small
+\resizebox{\ifdim\width>\columnwidth\columnwidth\else\width\fi}{!}{\begin{tabular}{lrrr}
+\toprule
+\textbf{Class} & \textbf{Accepted} & \textbf{Cert.\ valid} & \textbf{Anom.} \\
+\midrule
+Content corruption & 0/200 & 0/200 & 0 \\
+Public key corruption & 0/200 & 0/200 & 0 \\
+Patient sig.\ corruption & 0/200 & 0/200 & 0 \\
+Authority sig.\ corruption & 0/200 & 0/200 & 0 \\
+Random truncation & 0/200 & 0/200 & 0 \\
+Cross-patient content graft & 0/200 & 0/200 & 0 \\
+Forged key (Tier 2 attack) & 0/200 & 0/200 & 0 \\
+issuedAt edit & 0/200 & 0/200 & 0 \\
+Patient-ID relabel & 0/200 & 0/200 & 0 \\
+Certificate graft & 0/200 & 0/200 & 0 \\
+Superseded-tag replay$^\dagger$ & 0/200 & 200/200 & 0 \\
+Revoked-tag replay$^\dagger$ & 0/200 & 200/200 & 0 \\
+Valid current tag (control) & 200/200 & 200/200 & 0 \\
+\bottomrule
+\multicolumn{4}{l}{\footnotesize $^\dagger$Signatures valid; rejected only by the freshness check.}
+\end{tabular}}
+\label{tab:tamper}
+\end{center}
+\end{table}

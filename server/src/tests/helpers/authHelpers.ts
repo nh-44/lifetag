@@ -4,19 +4,19 @@
 import jwt from 'jsonwebtoken';
 import { Role } from '../../constants/roles';
 
-const TEST_SECRET = process.env.JWT_SECRET ?? 'lifetag_test_jwt_secret_do_not_use_in_production';
+const TEST_SECRET = process.env.JWT_SECRET ?? 'aegistag_test_jwt_secret_do_not_use_in_production';
 
 export function makeToken(userId: string, role: Role, expiresIn: string = '15m'): string {
-  return jwt.sign({ userId, role }, TEST_SECRET, { expiresIn } as jwt.SignOptions);
+  return jwt.sign({ userId, role, typ: 'access' }, TEST_SECRET, { expiresIn } as jwt.SignOptions);
 }
 
 export function makeRefreshToken(userId: string, role: Role, expiresIn: string = '7d'): string {
-  return jwt.sign({ userId, role }, TEST_SECRET, { expiresIn } as jwt.SignOptions);
+  return jwt.sign({ userId, role, typ: 'refresh' }, TEST_SECRET, { expiresIn, jwtid: Math.random().toString(36) } as jwt.SignOptions);
 }
 
 export function makeExpiredToken(userId: string, role: Role): string {
-  // expiresIn: 0 creates a token that is already expired
-  return jwt.sign({ userId, role }, TEST_SECRET, { expiresIn: -1 } as jwt.SignOptions);
+  // expiresIn: -1 creates a token that is already expired
+  return jwt.sign({ userId, role, typ: 'refresh' }, TEST_SECRET, { expiresIn: -1 } as jwt.SignOptions);
 }
 
 export function makeTamperedToken(userId: string, role: Role): string {

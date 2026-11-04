@@ -1,0 +1,21 @@
+\begin{table}[htbp]
+\caption{Cryptographic \& Compression Latency --- CPH2487, Android 10, Chrome 151.0.0.0 (n=100, 20 warm-up; mobile timer resolution 0.1\,ms). Node: server-class reference.}
+\begin{center}
+\small
+\resizebox{\ifdim\width>\columnwidth\columnwidth\else\width\fi}{!}{\begin{tabular}{lrrrr}
+\toprule
+ & \multicolumn{3}{c}{\textbf{Mobile (ms)}} & \textbf{Node} \\
+\textbf{Operation} & Mean & Median & p95 & Mean (ms) \\
+\midrule
+ECDSA Key Generation & 0.11 & 0.10 & 0.20 & 0.027 \\
+Signature Creation & 0.14 & 0.10 & 0.20 & 0.020 \\
+Tier 1 Verification & 0.25 & 0.30 & 0.30 & 0.051 \\
+Tier 2 Verification & 0.26 & 0.30 & 0.30 & 0.053 \\
+Gzip Compression & 1.27 & 1.20 & 1.70 & 0.020 \\
+Gzip Decompression & 1.34 & 1.10 & 1.90 & 0.008 \\
+Scan-Path Total & 2.09 & 2.00 & 2.70 & 0.117 \\
+\bottomrule
+\end{tabular}}
+\label{tab:latency}
+\end{center}
+\end{table}

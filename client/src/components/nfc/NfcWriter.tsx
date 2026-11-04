@@ -1,48 +1,40 @@
-import { useState, useEffect } from "react";
-import { Edit, Download, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Edit, Download, Plus, Trash2, ShieldCheck, Nfc } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
 import { fetchWithAuth, logBenchmarkTelemetry } from "@/services/api";
+import { certifyTagKey } from "@/services/userService";
+import { getNfcSupport, writeTag, readTagOnce, describeNfcError, describeWriteError } from "@/lib/webNfc";
+import { encodeTag, decodeTagMessage, sameContent, EncodedTag, TagFormat, TagModel, TAG_CAPACITY_BYTES } from "@/lib/tagCodec";
 
 interface NfcWriterProps {
   onWriteComplete: (accountId: string) => void;
   onWriteError: (error: string) => void;
 }
 
-/**
- * Web NFC's write() on Android throws a transient NetworkError ("IO error" /
- * tag-lost-style message, see the errorMessage mapping in handleWrite's catch
- * block below) more often than read() does, because a write transceives far
- * more bytes and is correspondingly more sensitive to the tag moving mid-
- * operation. Retrying a couple of times within the same physical tap — before
- * asking the user to re-tap — resolves most of these without any UX cost.
- */
-async function writeWithRetries(records: any[], maxAttempts = 3, delayMs = 400): Promise<void> {
-  let lastError: any;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      // @ts-ignore
-      const ndef = new NDEFReader();
-      await ndef.write({ records });
-      return;
-    } catch (e) {
-      lastError = e;
-      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  throw lastError;
-}
+const FORMAT_LABELS: Record<TagFormat, string> = {
+  "v3-binary": "V3 compact binary (recommended)",
+  "v1-text": "V1 gzip text (legacy compatibility)",
+  "id-only": "ID only, no clinical data (online lookup)",
+};
 
+/**
+ * Tag issuance in two explicit steps:
+ *  1. Prepare: sign with a fresh per-tag key and get the server certificate. This
+ *     is the slow, network-bound part (a cold backend can take many seconds).
+ *  2. Write: a separate button press, so the NFC write starts immediately inside
+ *     a fresh user gesture and the operator only holds the tag for the write itself.
+ * After writing, "Verify" reads the tag back and checks it byte-for-byte and
+ * cryptographically, so a write is only reported good once it is proven good.
+ */
 const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
-  const [isNfcSupported, setIsNfcSupported] = useState<boolean | null>(null);
-  const [isWriting, setIsWriting] = useState(false);
+  const [support] = useState(getNfcSupport);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchAccountId, setFetchAccountId] = useState("");
 
@@ -55,16 +47,20 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
   const [emergencyContacts, setEmergencyContacts] = useState<Array<{ userId: string; name: string }>>([
     { userId: "", name: "" }
   ]);
-  const [authoritySignature, setAuthoritySignature] = useState("");
-  const [generatedPayloadText, setGeneratedPayloadText] = useState("");
-  const [generatedPayloadHex, setGeneratedPayloadHex] = useState("");
-  const [isCompactMode, setIsCompactMode] = useState(false);
 
-  // Check if NFC is supported
-  useEffect(() => {
-    // @ts-ignore
-    setIsNfcSupported(typeof NDEFReader !== 'undefined');
-  }, []);
+  // Issuance options and state
+  const [format, setFormat] = useState<TagFormat>("v3-binary");
+  const [tagModel, setTagModel] = useState<TagModel>("NTAG216");
+  const [allowOverwrite, setAllowOverwrite] = useState(false);
+  const [prepared, setPrepared] = useState<EncodedTag | null>(null);
+  const [phase, setPhase] = useState<"idle" | "preparing" | "writing" | "verifying">("idle");
+  const [lastWriteOk, setLastWriteOk] = useState(false);
+  const [statusLine, setStatusLine] = useState("");
+
+  const invalidate = () => {
+    setPrepared(null);
+    setLastWriteOk(false);
+  };
 
   const handleFetchProfile = async () => {
     if (!/^\d{5}$/.test(fetchAccountId)) {
@@ -90,7 +86,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           ? patientData.emergencyContacts
           : [{ userId: "", name: "" }]
       );
-      setAuthoritySignature(patientData.authoritySignature || "");
+      invalidate();
       toast.success("Profile fetched and loaded successfully!");
     } catch (error: any) {
       toast.error(error.message || "Failed to load patient data");
@@ -101,193 +97,132 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
 
   const handleAddContact = () => {
     setEmergencyContacts([...emergencyContacts, { userId: "", name: "" }]);
+    invalidate();
   };
 
   const handleRemoveContact = (index: number) => {
     const updated = emergencyContacts.filter((_, idx) => idx !== index);
     setEmergencyContacts(updated.length > 0 ? updated : [{ userId: "", name: "" }]);
+    invalidate();
   };
 
   const handleContactChange = (index: number, key: "userId" | "name", value: string) => {
     const updated = [...emergencyContacts];
-    updated[index][key] = value;
+    updated[index] = { ...updated[index], [key]: value };
     setEmergencyContacts(updated);
+    invalidate();
   };
 
-  const handleCopyPayload = () => {
-    if (!generatedPayloadText) {
-      toast.error("Please generate/write the payload first to copy it.");
+  /** Step 1: sign + certify + encode. Network-bound; no NFC involved yet. */
+  const handlePrepare = async () => {
+    if (!/^\d{5}$/.test(fhirPatientId)) {
+      toast.error("A 5-digit patient account ID is required");
       return;
     }
-    navigator.clipboard.writeText(generatedPayloadText);
-    toast.success("NFC Payload copied to clipboard!");
-  };
-
-  const handleCopyHex = () => {
-    if (!generatedPayloadHex) {
-      toast.error("Please generate/write the payload first to copy it.");
-      return;
-    }
-    navigator.clipboard.writeText(generatedPayloadHex);
-    toast.success("Hex bytes copied to clipboard!");
-  };
-
-  const handleWrite = async () => {
-    if (!fhirPatientId.trim()) {
-      toast.error("FHIR Patient ID is required");
-      return;
-    }
-    if (!name.trim()) {
+    if (format !== "id-only" && !name.trim()) {
       toast.error("Patient Name is required");
       return;
     }
 
-    // Filter valid emergency contacts
-    const validContacts = emergencyContacts.filter(c => c.userId.trim() && c.name.trim());
-
-    setIsWriting(true);
+    setPhase("preparing");
+    setStatusLine("Signing and requesting the Healthcare Authority certificate…");
     try {
-      let payload: any;
-      if (isCompactMode) {
-        payload = {
-          version: "2.0",
-          timestamp: new Date().toISOString(),
-          fhirPatientId,
-          isUnsigned: true,
-          triageData: {
-            name,
-            bloodGroup,
-            allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
-            emergencyContacts: validContacts,
-            dnrStatus,
-          }
-        };
-      } else {
-        // 1. Generate local ECDSA signed payload from form fields
-        payload = await NfcCryptoService.generateTagPayload({
-          name,
+      const payload = await NfcCryptoService.generateTagPayload(
+        {
+          name: name.trim(),
           bloodGroup,
-          allergies: allergiesText.split(",").map(s => s.trim()).filter(Boolean),
-          emergencyContacts: validContacts,
+          allergies: allergiesText.split(",").map((s) => s.trim()).filter(Boolean),
+          emergencyContacts: emergencyContacts.filter((c) => c.userId.trim() && c.name.trim()),
           dnrStatus,
           fhirPatientId,
-          authoritySignature: authoritySignature || undefined,
-        });
-      }
-
-      let compressedBytes: Uint8Array;
-      let textRecordValue: string;
-
-      if (isCompactMode) {
-        const shortPayload = NfcCryptoService.toShortFormat(payload);
-        const jsonString = JSON.stringify(shortPayload);
-        compressedBytes = new TextEncoder().encode(jsonString);
-        textRecordValue = jsonString;
-      } else {
-        compressedBytes = await NfcCryptoService.compressPayload(payload);
-        const binaryToBase64 = (bytes: Uint8Array) => {
-          let binary = '';
-          const len = bytes.byteLength;
-          for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          return btoa(binary);
-        };
-        const compressedBase64 = binaryToBase64(compressedBytes);
-        textRecordValue = `gzip:${compressedBase64}`;
-      }
-      
-      const maxBudget = isCompactMode ? 137 : 504;
-      if (compressedBytes.length > maxBudget) {
-        throw new Error(isCompactMode
-          ? `Payload size (${compressedBytes.length} bytes) exceeds NTAG213 tag budget (137 bytes).`
-          : `Compressed payload size (${compressedBytes.length} bytes) exceeds standard NTAG215 budget (504 bytes). Please reduce input fields.`
+        },
+        // ID-only tags carry nothing to certify. Every other format is certified by the
+        // server (DOCTOR only), which also makes it the patient's only current tag.
+        format === "id-only" ? undefined : (publicKey, issuedAt) => certifyTagKey(fhirPatientId, publicKey, issuedAt)
+      );
+      const encoded = await encodeTag(payload, format);
+      const capacity = TAG_CAPACITY_BYTES[tagModel];
+      if (encoded.tagBytes > capacity) {
+        throw new Error(
+          `This tag needs ${encoded.tagBytes} B but an ${tagModel} holds ${capacity} B.` +
+          (format === "v1-text" ? " Switch to V3 compact binary." : " Use a larger tag or shorten the profile.")
         );
       }
-      
-      const bytesToHex = (bytes: Uint8Array) => {
-        return Array.from(bytes)
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-      };
-      const compressedHex = bytesToHex(compressedBytes);
-
-      setGeneratedPayloadText(textRecordValue);
-      setGeneratedPayloadHex(compressedHex);
-
-      if (isNfcSupported) {
-        toast.info(`Hold the NFC tag near your device... (${compressedBytes.length} bytes)`);
-
-        const startTimer = performance.now();
-
-        // 3. Write Base64 Gzip payload as a standard text record (universally compatible).
-        // Retries internally on the transient NetworkError/IO-error class Web NFC write()
-        // is known to throw (see writeWithRetries above and the NetworkError branch below).
-        await writeWithRetries([
-          {
-            recordType: "text",
-            data: textRecordValue,
-            lang: "en"
-          }
-        ]);
-
-        const endTimer = performance.now();
-        const duration = endTimer - startTimer;
-
-        // Log write speed telemetry
-        await logBenchmarkTelemetry({
-          operation: "WRITE",
-          payloadSizeRaw: JSON.stringify(payload).length,
-          payloadSizeCompressed: compressedBytes.length,
-          timeElapsedMs: duration,
-          deviceMeta: navigator.userAgent,
-        });
-
-        console.log(`Successfully wrote compressed payload to tag in ${duration.toFixed(2)}ms:`, payload);
-        toast.success(`Compressed NFC Tag written successfully in ${duration.toFixed(0)}ms!`);
-        onWriteComplete(fhirPatientId);
-      } else {
-        // Simulate writing for unsupported browsers
-        toast.info(`Simulating NFC write of compressed payload... (${compressedBytes.length} bytes)`);
-        const startTimer = performance.now();
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const duration = performance.now() - startTimer;
-
-        await logBenchmarkTelemetry({
-          operation: "WRITE",
-          payloadSizeRaw: JSON.stringify(payload).length,
-          payloadSizeCompressed: compressedBytes.length,
-          timeElapsedMs: duration,
-          deviceMeta: `${navigator.userAgent} [SIMULATED]`,
-        });
-
-        toast.success("Simulation: NFC Tag written successfully!");
-        onWriteComplete(fhirPatientId);
-      }
-    } catch (error: any) {
-      console.error("NFC Write Error:", error);
-      let errorMessage = error.message || "Failed to write to NFC tag";
-      if (error.name === 'NotAllowedError') {
-        errorMessage = "NFC permission denied. Please allow NFC access.";
-      } else if (error.name === 'NotSupportedError') {
-        errorMessage = "NFC is not supported on this device or tag configuration.";
-      } else if (error.name === 'NetworkError') {
-        errorMessage = "NFC connection lost/IO Error after 3 attempts. Please hold the tag steady against the back of the device for 2-3 seconds and try again.";
-      }
-      onWriteError(errorMessage);
-      toast.error(`Write failed: ${errorMessage}`);
+      setPrepared(encoded);
+      setLastWriteOk(false);
+      setStatusLine(`Ready: ${encoded.tagBytes} of ${capacity} B on ${tagModel}. Now press Write and hold the tag still.`);
+    } catch (e: any) {
+      setStatusLine("");
+      toast.error(e.message || "Failed to prepare tag");
+      onWriteError(e.message || "Failed to prepare tag");
     } finally {
-      setIsWriting(false);
+      setPhase("idle");
     }
   };
+
+  /** Step 2: the NFC write itself, started directly from the button press. */
+  const handleWrite = async () => {
+    if (!prepared) return;
+    setPhase("writing");
+    setStatusLine("Hold the tag flat against the back of the phone and keep it still…");
+    try {
+      const { attemptsUsed, elapsedMs } = await writeTag(prepared.records, { overwrite: allowOverwrite });
+      void logBenchmarkTelemetry({
+        operation: "WRITE",
+        payloadSizeRaw: prepared.content.length,
+        payloadSizeCompressed: prepared.tagBytes,
+        timeElapsedMs: elapsedMs,
+        deviceMeta: `${navigator.userAgent} [${prepared.format}; attempts=${attemptsUsed}]`,
+      });
+      setLastWriteOk(true);
+      setStatusLine(`Written in ${(elapsedMs / 1000).toFixed(1)} s${attemptsUsed > 1 ? ` (${attemptsUsed} attempts)` : ""}. Tap Verify to read it back.`);
+      toast.success("Tag written");
+      onWriteComplete(fhirPatientId);
+    } catch (e) {
+      const failure = await describeWriteError(e, allowOverwrite);
+      setStatusLine(failure.hint);
+      toast.error(`Write failed: ${failure.hint}`);
+      onWriteError(failure.raw);
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  /** Read-after-write: the tag must hold exactly what was written, and it must verify. */
+  const handleVerify = async () => {
+    if (!prepared) return;
+    setPhase("verifying");
+    setStatusLine("Tap the tag again to verify it…");
+    try {
+      const read = await readTagOnce();
+      if (!sameContent(prepared, read.message)) throw new Error("The tag does not contain the data that was just written. Write it again.");
+      const { payload } = await decodeTagMessage(read.message);
+      if (!payload.isUnsigned) {
+        const result = await NfcCryptoService.verifyTagIntegrity(payload);
+        if (!result.verified) throw new Error(result.error || "Read-back verification failed");
+        setStatusLine(result.trustedAuthority ? "Verified: tag is byte-identical and authority-certified." : "Verified, but the certificate is not trusted by this device's authority key.");
+      } else {
+        setStatusLine("Verified: ID-only tag reads back correctly.");
+      }
+      toast.success("Tag verified");
+    } catch (e) {
+      const msg = e instanceof Error && !(e as any).failure ? e.message : describeNfcError(e).hint;
+      setStatusLine(msg);
+      toast.error(msg);
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  const busy = phase !== "idle";
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-2 pb-3 border-b">
-        <Edit className="h-5 w-5 text-lifetag-primary" />
+        <Edit className="h-5 w-5 text-aegistag-primary" />
         <h2 className="text-xl font-bold">Emergency Triage Card Writer</h2>
       </div>
-      
+
       <div className="space-y-6">
         {/* Fetch Section */}
         <div className="bg-slate-100 p-4 rounded-lg flex flex-col md:flex-row gap-3 items-end">
@@ -302,7 +237,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
               maxLength={5}
             />
           </div>
-          <Button 
+          <Button
             variant="outline"
             onClick={handleFetchProfile}
             disabled={isFetching || !/^\d{5}$/.test(fetchAccountId)}
@@ -316,30 +251,9 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
         <Separator />
 
         {/* Triage Form Fields */}
-        <div className="space-y-4">
+        <div className="space-y-4" onChange={invalidate}>
           <h3 className="font-semibold text-lg">Patient Triage Information</h3>
-          
-          <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 p-3 rounded-lg">
-            <input 
-              type="checkbox" 
-              id="compactMode" 
-              checked={isCompactMode} 
-              onChange={(e) => setIsCompactMode(e.target.checked)}
-              className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-            />
-            <div className="grid gap-1.5 leading-none">
-              <label 
-                htmlFor="compactMode" 
-                className="text-xs font-bold text-amber-900 cursor-pointer"
-              >
-                ⚡ Ultra-Compact Mode (for NTAG213 Tags)
-              </label>
-              <p className="text-[10px] text-amber-700">
-                Bypasses signatures/keys to compress payload to ~45 bytes, fitting easily on NTAG213 (144B) chips.
-              </p>
-            </div>
-          </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="fhirPatientId">FHIR Patient ID (5-digit Account ID)</Label>
@@ -351,7 +265,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
                 maxLength={5}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="patientName">Full Name</Label>
               <Input
@@ -366,7 +280,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="bloodGroup">Blood Group</Label>
-              <Select value={bloodGroup} onValueChange={setBloodGroup}>
+              <Select value={bloodGroup} onValueChange={(v) => { setBloodGroup(v); invalidate(); }}>
                 <SelectTrigger id="bloodGroup">
                   <SelectValue placeholder="Select blood group" />
                 </SelectTrigger>
@@ -382,7 +296,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="allergies">Allergies (comma-separated)</Label>
               <Input
@@ -402,7 +316,7 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
             <Switch
               id="dnrStatus"
               checked={dnrStatus}
-              onCheckedChange={setDnrStatus}
+              onCheckedChange={(v) => { setDnrStatus(v); invalidate(); }}
             />
           </div>
 
@@ -410,10 +324,10 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <Label className="font-semibold text-base">Emergency Contacts</Label>
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={handleAddContact}
                 className="flex items-center gap-1 text-xs"
               >
@@ -444,10 +358,10 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
                     />
                   </div>
                 </div>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemoveContact(index)}
                   disabled={emergencyContacts.length === 1 && !contact.userId && !contact.name}
                   className="text-red-500 hover:text-red-700 hover:bg-red-50"
@@ -457,120 +371,73 @@ const NfcWriter = ({ onWriteComplete, onWriteError }: NfcWriterProps) => {
               </div>
             ))}
           </div>
-
-          {/* Authority Certificate */}
-          <div className="space-y-2">
-            <Label htmlFor="authSig">Healthcare Authority Digital Certificate</Label>
-            <Input
-              id="authSig"
-              value={authoritySignature}
-              disabled
-              placeholder="Fetched automatically from portal database"
-              className="bg-slate-100 italic text-xs text-slate-500 truncate"
-            />
-          </div>
         </div>
 
         <Separator />
 
-        {/* Action Button */}
+        {/* Tag options */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tagFormat">Tag format</Label>
+            <Select value={format} onValueChange={(v) => { setFormat(v as TagFormat); invalidate(); }}>
+              <SelectTrigger id="tagFormat"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(FORMAT_LABELS) as TagFormat[]).map((f) => (
+                  <SelectItem key={f} value={f}>{FORMAT_LABELS[f]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tagModel">Tag model</Label>
+            <Select value={tagModel} onValueChange={(v) => { setTagModel(v as TagModel); invalidate(); }}>
+              <SelectTrigger id="tagModel"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TAG_CAPACITY_BYTES) as TagModel[]).map((m) => (
+                  <SelectItem key={m} value={m}>{m} ({TAG_CAPACITY_BYTES[m]} B)</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 border-amber-200">
+          <div className="space-y-0.5">
+            <Label htmlFor="allowOverwrite" className="font-medium">Allow overwriting a tag that already has data</Label>
+            <p className="text-xs text-amber-800">Off: only blank tags are written, so an existing tag is never replaced by accident. Turn on to re-issue a tag.</p>
+          </div>
+          <Switch id="allowOverwrite" checked={allowOverwrite} onCheckedChange={setAllowOverwrite} />
+        </div>
+
+        {/* Actions */}
         <div className="space-y-2">
-          <Button 
-            onClick={handleWrite}
-            disabled={isWriting || !name.trim() || !fhirPatientId.trim()}
-            className="w-full bg-green-600 hover:bg-green-700 font-semibold"
-          >
-            {isWriting ? "Writing to Tag..." : "Write Compressed Payload to NFC"}
-          </Button>
-          
-          {isNfcSupported === false && (
-            <p className="text-center text-orange-500 text-xs">
-              NFC is not supported in this browser. Running in Simulation mode.
-            </p>
+          {!support.supported && (
+            <p className="text-center text-orange-600 text-sm" data-testid="nfc-unsupported">{support.message}</p>
           )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Button onClick={handlePrepare} disabled={busy || !/^\d{5}$/.test(fhirPatientId)} variant="outline" className="font-semibold">
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              {phase === "preparing" ? "Preparing…" : "1. Prepare & certify"}
+            </Button>
+            <Button onClick={handleWrite} disabled={busy || !prepared || !support.supported} className="bg-green-600 hover:bg-green-700 font-semibold">
+              <Nfc className="mr-2 h-4 w-4" />
+              {phase === "writing" ? "Hold tag…" : "2. Write to tag"}
+            </Button>
+            <Button onClick={handleVerify} disabled={busy || !lastWriteOk || !support.supported} variant="outline">
+              {phase === "verifying" ? "Tap tag…" : "3. Verify"}
+            </Button>
+          </div>
+          <p className="text-sm text-slate-700 min-h-[1.25rem]" data-testid="writer-status">{statusLine}</p>
 
-          {generatedPayloadText && (
-            <div className="mt-4 p-4 border rounded-lg bg-blue-50/50 border-blue-100 space-y-4">
-              <div className="border-b pb-2">
-                <span className="text-sm font-bold text-blue-900 flex items-center gap-1.5">
-                  📋 NFC Tools Write Options (Manual Workaround)
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Use these values in third-party apps like <strong>NFC Tools</strong> if your mobile browser throws write conflicts.
-                </p>
+          {prepared && prepared.format === "v1-text" && (
+            <details className="text-xs text-slate-500">
+              <summary className="cursor-pointer">Fallback for browsers without Web NFC: text for NFC Tools</summary>
+              <p className="mt-1">NFC Tools → Write → Add a record → Text, then paste:</p>
+              <div className="flex gap-2 mt-1">
+                <code className="flex-1 truncate bg-white border rounded p-1">{new TextDecoder().decode(prepared.content)}</code>
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(new TextDecoder().decode(prepared.content)); toast.success("Copied"); }}>Copy</Button>
               </div>
-
-              {/* Option 1: Standard Text Record */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-700">Option A: Text Record (Easiest)</span>
-                  <Button 
-                    onClick={handleCopyPayload}
-                    variant="outline" 
-                    size="sm"
-                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
-                  >
-                    Copy Text Payload
-                  </Button>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-tight">
-                  In NFC Tools, select <strong>Write → Add a record → Text</strong>. Paste this string:
-                </p>
-                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
-                  {generatedPayloadText}
-                </div>
-              </div>
-
-              {/* Option 2: Custom MIME Record */}
-              <div className="space-y-1.5 pt-1 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-700">Option B: Custom MIME Record</span>
-                  <Button 
-                    onClick={handleCopyHex}
-                    variant="outline" 
-                    size="sm"
-                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
-                  >
-                    Copy Hex Bytes
-                  </Button>
-                </div>
-                <div className="text-[11px] text-slate-600 space-y-1">
-                  <p>In NFC Tools, select <strong>Write → Add a record → Data / Custom Record</strong>:</p>
-                  <ul className="list-disc list-inside pl-1 text-[10px] text-slate-500 space-y-0.5">
-                    <li><strong>Content-Type:</strong> <code className="bg-slate-100 px-1 rounded">application/octet-stream</code></li>
-                    <li><strong>Data Type:</strong> Choose <strong>Hexadecimal</strong> (if your device supports Hex input)</li>
-                    <li><strong>Data:</strong> Paste the copied Hex payload below:</li>
-                  </ul>
-                </div>
-                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
-                  {generatedPayloadHex}
-                </div>
-              </div>
-
-              {/* Option C: Plain 5-digit Patient ID */}
-              <div className="space-y-1.5 pt-1 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-700">Option C: Plain Patient ID (Only 5 bytes - Fits NTAG213)</span>
-                  <Button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(fhirPatientId);
-                      toast.success("Patient ID copied to clipboard!");
-                    }}
-                    variant="outline" 
-                    size="sm"
-                    className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px] h-7 px-2.5"
-                  >
-                    Copy Patient ID
-                  </Button>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-tight">
-                  In NFC Tools, select <strong>Write → Add a record → Text</strong>. Paste just this 5-digit ID. This fits 100% of NTAG213 tags, and the website scanner will automatically retrieve your database profile!
-                </p>
-                <div className="bg-white p-2 border rounded font-mono text-xs text-slate-500 truncate max-w-full">
-                  {fhirPatientId}
-                </div>
-              </div>
-            </div>
+            </details>
           )}
         </div>
       </div>

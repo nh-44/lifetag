@@ -1,7 +1,7 @@
 {
-  "name": "lifetag-server",
+  "name": "aegistag-server",
   "version": "1.0.0",
-  "description": "LifeTag Node.js Express Backend with PostgreSQL & Prisma ORM",
+  "description": "AegisTag Node.js Express Backend with PostgreSQL & Prisma ORM",
   "main": "dist/server.js",
   "type": "commonjs",
   "scripts": {
@@ -20,10 +20,10 @@
     "test:security": "vitest run src/tests/unit/crypto.utils.spec.ts src/tests/unit/nfc.service.spec.ts",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
-    "db:test:setup": "cross-env DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/lifetag_test?schema=public\" prisma db push"
+    "db:test:setup": "cross-env DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/aegistag_test?schema=public\" prisma db push"
   },
   "keywords": [
-    "lifetag",
+    "aegistag",
     "nfc",
     "express",
     "postgresql",

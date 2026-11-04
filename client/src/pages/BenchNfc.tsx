@@ -1,358 +1,386 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  getNfcSupport, getNfcPermission, canMakeReadOnly, cancelNfcOperation, makeTagReadOnly, describeNfcError,
+} from "@/lib/webNfc";
+import { encodeTag, decodeTagMessage, TAG_CAPACITY_BYTES, TagModel, TagFormat } from "@/lib/tagCodec";
 import { NfcCryptoService } from "@/services/nfcCryptoService";
-import { logBenchmarkTelemetry } from "@/services/api";
+import {
+  FACTORS, FactorKey, Condition, DEFAULT_CONDITION, TRIAL_TYPES, TrialType, LabTrial, LAB_VERSION, PlanStep,
+  buildPlan, summarize, toCsv,
+} from "@/lib/nfcLab";
+import { runLabTrial, buildLabPayload, writeTamperedTag } from "@/lib/nfcLabRunner";
+import { runScanPathLatency, measureTimerResolutionMs } from "@/lib/scanPathLatency";
 
 /**
- * Bench: NFC Physical Trials — a simple QA page (not patient-facing) for
- * collecting the one kind of data that can't be measured from a desktop:
- * real NFC read/write handshake timing and real mobile Web Crypto timing.
- * See NFC_PROTOCOL.md for how to use it.
+ * NFC Lab — the physical-trial test suite (route /bench/nfc). Not patient-facing.
+ * Every trial runs the same Web NFC + codec code the production writer/scanner use,
+ * records its full condition, and is kept in localStorage until exported.
+ * See NFC_PROTOCOL.md for the procedure.
  */
 
-interface NfcTrial {
-  trialType: "read" | "write";
-  note: string;
-  success: boolean;
-  retryCount: number;
-  attemptsUsed: number; // internal auto-retries within this one trial (write only; read is always 1)
-  handshakeMs: number | null; // tap -> payload available (read) / tap -> write complete (write)
-  tapToRenderMs: number | null; // read only: tap -> full verification + DOM commit
-  errorMessage: string;
-  timestamp: string;
-}
+const TRIALS_KEY = "aegistag_nfc_lab_v2";
+const PLAN_KEY = "aegistag_nfc_lab_plan";
+const SESSION_KEY = "aegistag_nfc_lab_session";
 
-/** Chrome's Web NFC throws NetworkError ("IO error"/tag-lost-style messages) fairly
- * often on write, since a write transceives far more bytes than a read and is
- * correspondingly more sensitive to the tag moving mid-operation. Retrying a
- * couple of times within the same physical tap is standard practice for this
- * class of transient hardware I/O error (see the identical NetworkError handling
- * already in client/src/components/nfc/NfcWriter.tsx). */
-async function withRetries<T>(fn: () => Promise<T>, maxAttempts: number, delayMs: number): Promise<{ result: T; attemptsUsed: number }> {
-  let lastError: any;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const result = await fn();
-      return { result, attemptsUsed: attempt };
-    } catch (e) {
-      lastError = e;
-      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  throw lastError;
-}
-
-function describeError(e: any): string {
-  const name = e?.name ? `${e.name}: ` : "";
-  return `${name}${e?.message || String(e)}`;
-}
-
-interface DeviceInfo {
-  model: string;
-  androidVersion: string;
-  chromeVersion: string;
-}
-
-interface LatencyStats {
-  n: number; meanMs: number; medianMs: number; stdDevMs: number; minMs: number; maxMs: number; p95Ms: number;
-}
-
-function computeStats(samples: number[]): LatencyStats {
-  const n = samples.length;
-  const sorted = [...samples].sort((a, b) => a - b);
-  const mean = samples.reduce((a, b) => a + b, 0) / n;
-  const variance = samples.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
-  const median = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[(n - 1) / 2];
-  const p95Index = Math.min(n - 1, Math.ceil(0.95 * n) - 1);
-  const round = (x: number) => Math.round(x * 1000) / 1000;
-  return { n, meanMs: round(mean), medianMs: round(median), stdDevMs: round(Math.sqrt(variance)), minMs: round(sorted[0]), maxMs: round(sorted[n - 1]), p95Ms: round(sorted[p95Index]) };
-}
+interface DeviceInfo { model: string; androidVersion: string; chromeVersion: string }
 
 async function detectDeviceInfo(): Promise<DeviceInfo> {
   const ua = navigator.userAgent;
-  const chromeMatch = ua.match(/Chrome\/([\d.]+)/);
-  const androidMatch = ua.match(/Android ([\d.]+)/);
   let model = "";
   try {
-    // @ts-ignore - Chrome-only User-Agent Client Hints API
-    if (navigator.userAgentData?.getHighEntropyValues) {
-      // @ts-ignore
-      const hints = await navigator.userAgentData.getHighEntropyValues(["model"]);
-      if (hints.model) model = hints.model;
-    }
-  } catch { /* fall through to manual entry */ }
-
-  return { model, androidVersion: androidMatch?.[1] ?? "", chromeVersion: chromeMatch?.[1] ?? "" };
+    const hints = await (navigator as any).userAgentData?.getHighEntropyValues?.(["model"]);
+    if (hints?.model) model = hints.model;
+  } catch { /* manual entry */ }
+  return { model, androidVersion: ua.match(/Android ([\d.]+)/)?.[1] ?? "", chromeVersion: ua.match(/Chrome\/([\d.]+)/)?.[1] ?? "" };
 }
 
+const load = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const download = (content: string, filename: string, type: string) => {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
+const ms = (x: number | null) => (x == null ? "–" : `${Math.round(x)}`);
+
+const SUMMARY_KEYS: Array<keyof LabTrial> = ["trialType", "format", "profile", "distanceCm", "orientation", "medium", "placement", "tagModel"];
+
 const BenchNfc = () => {
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>({ model: "", androidVersion: "", chromeVersion: "" });
-  const [note, setNote] = useState("1cm, flat, bare tag");
-  const [readRetryCount, setReadRetryCount] = useState(0);
-  const [writeRetryCount, setWriteRetryCount] = useState(0);
-  const [trials, setTrials] = useState<NfcTrial[]>([]);
+  const [device, setDevice] = useState<DeviceInfo>({ model: "", androidVersion: "", chromeVersion: "" });
+  const [env, setEnv] = useState<Record<string, string>>({});
+  const [session, setSession] = useState(() =>
+    load(SESSION_KEY, { sessionId: `S${Date.now().toString(36)}`, tagModel: "NTAG216" as TagModel | string, tagLabel: "Tag A", note: "", tagCostInr: "" })
+  );
+  const [condition, setCondition] = useState<Condition>(DEFAULT_CONDITION);
+  const [trialType, setTrialType] = useState<TrialType>("read-after-write");
+  const [trials, setTrials] = useState<LabTrial[]>(() => load(TRIALS_KEY, []));
+  const [plan, setPlan] = useState<{ steps: PlanStep[]; pos: number; seed: number } | null>(() => load(PLAN_KEY, null));
+  const [varied, setVaried] = useState<Partial<Record<FactorKey, string[]>>>({ distanceCm: ["0", "1", "2", "3"] });
+  const [planTypes, setPlanTypes] = useState<TrialType[]>(["read", "read-after-write"]);
+  const [reps, setReps] = useState(10);
+  const [groupBy, setGroupBy] = useState<Array<keyof LabTrial>>(["trialType", "format", "distanceCm"]);
+  const [running, setRunning] = useState(false);
   const [status, setStatus] = useState("");
-  const [isNfcSupported, setIsNfcSupported] = useState<boolean | null>(null);
-  const [tagCostInr, setTagCostInr] = useState("");
-  const [cryptoResult, setCryptoResult] = useState<any>(null);
-  const [cryptoRunning, setCryptoRunning] = useState(false);
+  const [selfTest, setSelfTest] = useState<Array<Record<string, string>> | null>(null);
+  const [latency, setLatency] = useState<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const support = useMemo(getNfcSupport, []);
 
   useEffect(() => {
-    detectDeviceInfo().then(setDeviceInfo);
-    // @ts-ignore
-    setIsNfcSupported(typeof NDEFReader !== "undefined");
-    const saved = localStorage.getItem("bench_nfc_trials");
-    if (saved) {
-      try { setTrials(JSON.parse(saved)); } catch { /* ignore corrupt local cache */ }
-    }
-  }, []);
+    detectDeviceInfo().then(setDevice);
+    (async () => {
+      setEnv({
+        "Secure context (HTTPS)": window.isSecureContext ? "yes" : "NO — open the https:// URL",
+        "Web NFC": support.supported ? "available" : support.message,
+        "NFC permission": await getNfcPermission(),
+        "makeReadOnly": canMakeReadOnly() ? "supported" : "not supported",
+        "Screen wake lock": "wakeLock" in navigator ? "supported" : "not supported (keep the screen on manually)",
+        "Cross-origin isolated": typeof crossOriginIsolated !== "undefined" && crossOriginIsolated ? "yes" : "no (timer coarsened)",
+        "Timer resolution": `${measureTimerResolutionMs()} ms`,
+      });
+    })();
+  }, [support]);
 
-  const persist = (next: NfcTrial[]) => {
-    setTrials(next);
-    localStorage.setItem("bench_nfc_trials", JSON.stringify(next));
-  };
+  useEffect(() => localStorage.setItem(TRIALS_KEY, JSON.stringify(trials)), [trials]);
+  useEffect(() => localStorage.setItem(PLAN_KEY, JSON.stringify(plan)), [plan]);
+  useEffect(() => localStorage.setItem(SESSION_KEY, JSON.stringify(session)), [session]);
 
-  const recordTrial = (trial: NfcTrial) => {
-    persist([...trials, trial]);
-    if (trial.trialType === "read") setReadRetryCount(trial.success ? 0 : readRetryCount + 1);
-    else setWriteRetryCount(trial.success ? 0 : writeRetryCount + 1);
-  };
-
-  const runReadTrial = async () => {
-    setStatus("Hold the written tag near the phone now...");
-    // @ts-ignore
-    const ndef = new NDEFReader();
+  const runTrial = async (type: TrialType, cond: Condition, planStep: number | null) => {
+    if (running) return; // one operation at a time; a second press used to cancel the first write
+    setRunning(true);
     const controller = new AbortController();
-    const tapStart = performance.now();
-
-    // Every exit path MUST abort `controller` — an un-aborted ndef.scan() leaves
-    // Android's NFC reader-mode registration active in the background, which can
-    // then conflict with a *later* ndef.write() call on the same page (this page
-    // runs read and write trials back-to-back without unmounting). Failing to do
-    // this on the error/exception paths (only the timeout and success paths did
-    // it before) was a real bug — very plausibly the cause of write trials
-    // failing with a "NetworkError"/IO-error after a prior read.
-    const finish = (fn: () => void) => { try { controller.abort(); } catch { /* already aborted */ } fn(); };
-
+    abortRef.current = controller;
+    const spec = TRIAL_TYPES[type];
+    setStatus(
+      cond.placement.startsWith("resting")
+        ? `Tag should already be in position (${spec.needs}). Waiting…`
+        : `Now bring ${spec.needs} to the phone and hold it still…`
+    );
     try {
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => finish(() => reject(new Error("Timed out waiting for tap (10s)"))), 10000);
-
-        ndef.addEventListener("reading", async (event: any) => {
-          const handshakeMs = performance.now() - tapStart;
-          try {
-            let payload: any = null;
-            for (const record of event.message.records) {
-              if (record.recordType === "text") {
-                const decoder = new TextDecoder(record.encoding || "utf-8");
-                const text = decoder.decode(record.data);
-                if (text.startsWith("gzip:")) {
-                  const bytes = Uint8Array.from(atob(text.slice(5)), (c) => c.charCodeAt(0));
-                  payload = await NfcCryptoService.decompressPayload(bytes);
-                }
-              }
-            }
-            if (payload) await NfcCryptoService.verifyTagIntegrity(payload); // Tier 1 (+ Tier 2 if authority-signed)
-
-            // Commit to DOM and wait one animation frame to approximate paint completion —
-            // the closest a web page can get to "rendered on screen" without a native profiler.
-            setStatus(`Rendered: ${payload?.triageData?.name ?? "(no payload found on tag)"}`);
-            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-            const tapToRenderMs = performance.now() - tapStart;
-
-            clearTimeout(timeout);
-            finish(() => {
-              recordTrial({ trialType: "read", note, success: true, retryCount: readRetryCount, attemptsUsed: 1, handshakeMs, tapToRenderMs, errorMessage: "", timestamp: new Date().toISOString() });
-              resolve();
-            });
-          } catch (e) {
-            clearTimeout(timeout);
-            finish(() => reject(e));
-          }
-        });
-        ndef.addEventListener("error", (e: any) => { clearTimeout(timeout); finish(() => reject(e)); });
-        // @ts-ignore - the installed Web NFC type defs don't model NDEFScanOptions
-        ndef.scan({ signal: controller.signal }).catch((e: any) => finish(() => reject(e)));
-      });
-      setStatus("Read trial recorded.");
-    } catch (e: any) {
-      const errorMessage = describeError(e);
-      recordTrial({ trialType: "read", note, success: false, retryCount: readRetryCount, attemptsUsed: 1, handshakeMs: null, tapToRenderMs: null, errorMessage, timestamp: new Date().toISOString() });
-      setStatus(`Read trial FAILED: ${errorMessage}`);
+      const outcome = await runLabTrial(type, cond, { timeoutMs: 20000, signal: controller.signal, onPrompt: setStatus });
+      const trial: LabTrial = {
+        ...cond,
+        ...outcome,
+        labVersion: LAB_VERSION,
+        id: `${session.sessionId}-${Date.now().toString(36)}`,
+        sessionId: session.sessionId,
+        planStep,
+        trialType: type,
+        expected: spec.expected,
+        tagModel: session.tagModel,
+        tagLabel: session.tagLabel,
+        deviceModel: device.model,
+        androidVersion: device.androidVersion,
+        chromeVersion: device.chromeVersion,
+        note: session.note,
+        timestamp: new Date().toISOString(),
+      };
+      setTrials((prev) => [...prev, trial]);
+      setStatus(
+        `${trial.outcomeMatched ? "✅ PASS" : "❌ FAIL"} — ${spec.label}` +
+        (trial.nfcMs != null ? `, ${Math.round(trial.nfcMs)} ms` : "") +
+        (trial.attemptsUsed && trial.attemptsUsed > 1 ? `, ${trial.attemptsUsed} attempts` : "") +
+        (trial.errorCode ? ` — ${trial.errorCode}: ${trial.errorRaw}` : "")
+      );
+      if (planStep != null) setPlan((p) => (p ? { ...p, pos: Math.max(p.pos, planStep + 1) } : p));
+    } finally {
+      abortRef.current = null;
+      setRunning(false);
     }
   };
 
-  const runWriteTrial = async () => {
-    setStatus("Hold the blank tag near the phone now...");
-    try {
-      const payload = await NfcCryptoService.generateTagPayload({
-        name: "Bench Test Patient", bloodGroup: "O-Positive", allergies: ["Penicillin"],
-        emergencyContacts: [{ userId: "+919876543210", name: "Test Contact" }],
-        dnrStatus: false, fhirPatientId: "90099",
-      });
-      const compressed = await NfcCryptoService.compressPayload(payload);
-      let binary = "";
-      for (let i = 0; i < compressed.length; i++) binary += String.fromCharCode(compressed[i]);
-      const text = `gzip:${btoa(binary)}`;
-
-      const tapStart = performance.now();
-      // Up to 3 attempts, 400ms apart, within the SAME physical tap — Web NFC
-      // write on Android throws a transient NetworkError ("IO error") often
-      // enough that NfcWriter.tsx already has a friendly message for it; an
-      // immediate retry frequently succeeds without the user re-tapping.
-      const { attemptsUsed } = await withRetries(async () => {
-        // @ts-ignore
-        const ndef = new NDEFReader();
-        await ndef.write({ records: [{ recordType: "text", data: text, lang: "en" }] });
-      }, 3, 400);
-      const handshakeMs = performance.now() - tapStart;
-
-      recordTrial({ trialType: "write", note, success: true, retryCount: writeRetryCount, attemptsUsed, handshakeMs, tapToRenderMs: null, errorMessage: "", timestamp: new Date().toISOString() });
-      setStatus(`Write trial recorded (${handshakeMs.toFixed(1)} ms, ${attemptsUsed} internal attempt${attemptsUsed > 1 ? "s" : ""}).`);
-    } catch (e: any) {
-      const errorMessage = describeError(e);
-      recordTrial({ trialType: "write", note, success: false, retryCount: writeRetryCount, attemptsUsed: 3, handshakeMs: null, tapToRenderMs: null, errorMessage, timestamp: new Date().toISOString() });
-      setStatus(`Write trial FAILED after 3 attempts: ${errorMessage}`);
-    }
+  const cancel = () => {
+    abortRef.current?.abort(new DOMException("Cancelled by operator", "AbortError"));
+    cancelNfcOperation();
   };
 
-  const runMobileCryptoLatency = async () => {
-    setCryptoRunning(true);
-    setStatus("Running Web Crypto latency benchmark (100 iterations x 7 ops)...");
-    const WARMUP = 20, MEASURED = 100;
-    const time = async (fn: () => Promise<void>) => {
-      const samples: number[] = [];
-      for (let i = 0; i < WARMUP + MEASURED; i++) {
-        const t0 = performance.now();
-        await fn();
-        const t1 = performance.now();
-        if (i >= WARMUP) samples.push(t1 - t0);
+  const runSelfTest = async () => {
+    setStatus("Running codec/crypto self-test (no tag needed)…");
+    const rows: Array<Record<string, string>> = [];
+    for (const profile of FACTORS.profile.levels) {
+      for (const format of ["v3-binary", "v1-text"] as TagFormat[]) {
+        try {
+          const payload = await buildLabPayload(profile);
+          const enc = await encodeTag(payload, format);
+          const msg = { records: enc.records.map((r) => r.recordType === "text"
+            ? { recordType: "text", encoding: "utf-8", data: new DataView(new TextEncoder().encode(r.data as string).buffer) }
+            : { recordType: r.recordType, data: new DataView(r.data as ArrayBuffer) }) };
+          const decoded = await decodeTagMessage(msg);
+          const verified = (await NfcCryptoService.verifyTagIntegrity(decoded.payload)).verified;
+          rows.push({
+            profile, format, bytes: String(enc.tagBytes),
+            ...Object.fromEntries((Object.keys(TAG_CAPACITY_BYTES) as TagModel[]).map((m) => [m, enc.tagBytes <= TAG_CAPACITY_BYTES[m] ? "fits" : "—"])),
+            roundTrip: verified ? "OK" : "FAIL",
+          });
+        } catch (e) {
+          rows.push({ profile, format, bytes: "", roundTrip: `ERROR ${e instanceof Error ? e.message : e}` });
+        }
       }
-      return computeStats(samples);
-    };
-
-    const patientKeyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-    const authorityKeyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-    const triageDataBytes = new TextEncoder().encode(JSON.stringify({ name: "John Doe", bloodGroup: "O-Negative", allergies: ["Penicillin"], emergencyContacts: [], dnrStatus: true }));
-    const pubJwk = await crypto.subtle.exportKey("jwk", patientKeyPair.publicKey);
-    const tagIdBytes = new TextEncoder().encode(JSON.stringify(pubJwk));
-
-    const patientSig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, patientKeyPair.privateKey, triageDataBytes);
-    const authoritySig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, authorityKeyPair.privateKey, tagIdBytes);
-
-    const compressed = await new Response(new Blob([triageDataBytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
-
-    const ecdsaKeyGeneration = await time(async () => { await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]); });
-    const signatureCreation = await time(async () => { await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, patientKeyPair.privateKey, triageDataBytes); });
-    const tier1Verification = await time(async () => { await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, patientKeyPair.publicKey, patientSig, triageDataBytes); });
-    const tier2Verification = await time(async () => { await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, authorityKeyPair.publicKey, authoritySig, tagIdBytes); });
-    const compression = await time(async () => { await new Response(new Blob([triageDataBytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer(); });
-    const decompression = await time(async () => { await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer(); });
-    const scanPathTotal = await time(async () => {
-      await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
-      await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, patientKeyPair.publicKey, patientSig, triageDataBytes);
-      await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, authorityKeyPair.publicKey, authoritySig, tagIdBytes);
-    });
-
-    const result = {
-      meta: {
-        generatedAt: new Date().toISOString(), platform: "mobile-web-crypto",
-        deviceModel: deviceInfo.model, androidVersion: deviceInfo.androidVersion, chromeVersion: deviceInfo.chromeVersion,
-        warmupIterations: WARMUP, measuredIterations: MEASURED,
-        encoding: "V1 (current production: short-format JSON, JWK public key, base64 signatures, gzip)",
-      },
-      operations: {
-        ecdsaKeyGeneration, signatureCreation,
-        tier1Verification_contentSignature: tier1Verification,
-        tier2Verification_authoritySignature: tier2Verification,
-        compression_gzip: compression, decompression_gunzip: decompression,
-        scanPathTotal_decompressPlusTier1PlusTier2: scanPathTotal,
-      },
-    };
-    setCryptoResult(result);
-    setCryptoRunning(false);
-    setStatus("Crypto latency benchmark complete.");
-  };
-
-  const downloadJson = (obj: any, filename: string) => {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadCsv = () => {
-    const headers = ["trialType", "note", "success", "retryCount", "attemptsUsed", "handshakeMs", "tapToRenderMs", "errorMessage", "timestamp"];
-    const rows = trials.map((t) => headers.map((h) => JSON.stringify((t as any)[h] ?? "")).join(","));
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "nfc-trials.csv"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const postTrialsToBenchmarkEndpoint = async () => {
-    setStatus(`Posting ${trials.length} trials to the backend...`);
-    let ok = 0;
-    for (const t of trials) {
-      const res = await logBenchmarkTelemetry({
-        operation: t.trialType.toUpperCase() as "READ" | "WRITE",
-        payloadSizeRaw: 0,
-        payloadSizeCompressed: 0,
-        timeElapsedMs: t.handshakeMs ?? -1,
-        deviceMeta: `note=${t.note};success=${t.success};retries=${t.retryCount};tapToRenderMs=${t.tapToRenderMs ?? "n/a"};device=${deviceInfo.model};android=${deviceInfo.androidVersion};chrome=${deviceInfo.chromeVersion}`,
-      });
-      if ((res as any)?.success !== false) ok++;
     }
-    setStatus(`Posted ${ok}/${trials.length} trials to the backend.`);
+    setSelfTest(rows);
+    setStatus(rows.every((r) => r.roundTrip === "OK") ? "Self-test passed." : "Self-test found problems — see table.");
   };
+
+  const runLatency = async () => {
+    setRunning(true);
+    setStatus("Running scan-path compute benchmark (≈15 s)…");
+    try {
+      setLatency(await runScanPathLatency(device));
+      setStatus("Latency benchmark complete.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const prepareTamperedTag = async () => {
+    setRunning(true);
+    setStatus("Setup: hold a tag to write a TAMPERED payload (for tamper-read trials)…");
+    try {
+      await writeTamperedTag(condition, { timeoutMs: 20000 });
+      setStatus("Tampered tag written. Now run Tampered tag (must reject) trials with it.");
+    } catch (e) {
+      setStatus(describeNfcError(e).hint);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const lockTag = async () => {
+    if (!window.confirm("PERMANENT: this makes the tag read-only forever. It can never be re-issued. Continue?")) return;
+    setRunning(true);
+    setStatus("Hold the tag to lock it…");
+    try {
+      await makeTagReadOnly();
+      setStatus("Tag is now read-only.");
+    } catch (e) {
+      setStatus(describeNfcError(e).hint);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const summary = useMemo(() => summarize(trials, groupBy), [trials, groupBy]);
+  const nextStep = plan && plan.pos < plan.steps.length ? plan.steps[plan.pos] : null;
+
+  const select = (key: FactorKey) => (
+    <label key={key} className="text-sm flex flex-col">
+      {FACTORS[key].label}
+      <select className="border rounded px-2 py-1" value={condition[key]} onChange={(e) => setCondition({ ...condition, [key]: e.target.value })}>
+        {FACTORS[key].levels.map((l) => <option key={l} value={l}>{key === "distanceCm" ? `${l} cm` : l}</option>)}
+      </select>
+    </label>
+  );
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Bench: NFC Physical Trials</h1>
-      <p className="text-sm text-slate-600">Not patient-facing — a simple QA page. See NFC_PROTOCOL.md for the full procedure.</p>
+    <div className="max-w-3xl mx-auto p-4 space-y-5">
+      <h1 className="text-2xl font-bold">NFC Lab — physical trial suite</h1>
+      <p className="text-sm text-slate-600">Not patient-facing. Trials are stored on this device until you export them. Procedure: NFC_PROTOCOL.md.</p>
 
-      {isNfcSupported === false && (
-        <div className="p-3 bg-red-100 text-red-800 rounded">Web NFC is not available. Use Chrome for Android, and make sure this page loaded over HTTPS.</div>
-      )}
-
-      <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Device info (auto-detected — edit if blank/wrong)</h2>
-        <label className="block text-sm">Model: <input className="border px-2 py-1 ml-2 w-64" value={deviceInfo.model} onChange={(e) => setDeviceInfo({ ...deviceInfo, model: e.target.value })} placeholder="e.g. Pixel 7" /></label>
-        <label className="block text-sm">Android version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.androidVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, androidVersion: e.target.value })} /></label>
-        <label className="block text-sm">Chrome version: <input className="border px-2 py-1 ml-2 w-32" value={deviceInfo.chromeVersion} onChange={(e) => setDeviceInfo({ ...deviceInfo, chromeVersion: e.target.value })} /></label>
-        <label className="block text-sm">Tag unit cost (₹): <input className="border px-2 py-1 ml-2 w-32" value={tagCostInr} onChange={(e) => setTagCostInr(e.target.value)} placeholder="e.g. 25" /></label>
+      {/* Environment */}
+      <section className="border rounded p-3 space-y-2">
+        <h2 className="font-semibold">1. Environment</h2>
+        <table className="text-sm w-full"><tbody>
+          {Object.entries(env).map(([k, v]) => (
+            <tr key={k}><td className="pr-3 text-slate-500 align-top">{k}</td><td className={/NO|not available|denied/i.test(v) ? "text-red-700" : ""}>{v}</td></tr>
+          ))}
+        </tbody></table>
+        <button className="border px-3 py-1 rounded" onClick={runSelfTest} disabled={running}>Run self-test (no tag)</button>
+        {selfTest && (
+          <table className="text-xs w-full border mt-2">
+            <thead><tr>{Object.keys(selfTest[0]).map((k) => <th key={k} className="border px-1">{k}</th>)}</tr></thead>
+            <tbody>{selfTest.map((r, i) => <tr key={i}>{Object.values(r).map((v, j) => <td key={j} className="border px-1">{v}</td>)}</tr>)}</tbody>
+          </table>
+        )}
       </section>
 
-      <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Run a trial</h2>
-        <label className="block text-sm">Note (optional — e.g. distance/orientation if you want to vary it): <input className="border px-2 py-1 ml-2 w-64" value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        <div className="flex gap-3 mt-2">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={runReadTrial}>Run READ trial</button>
-          <button className="bg-emerald-600 text-white px-4 py-2 rounded" onClick={runWriteTrial}>Run WRITE trial</button>
+      {/* Session */}
+      <section className="border rounded p-3 grid grid-cols-2 gap-2 text-sm">
+        <h2 className="font-semibold col-span-2">2. Session</h2>
+        <label className="flex flex-col">Device model<input className="border px-2 py-1" value={device.model} onChange={(e) => setDevice({ ...device, model: e.target.value })} placeholder="e.g. CPH2487" /></label>
+        <label className="flex flex-col">Android / Chrome<input className="border px-2 py-1" value={`${device.androidVersion} / ${device.chromeVersion}`} readOnly /></label>
+        <label className="flex flex-col">Tag model
+          <select className="border px-2 py-1" value={session.tagModel} onChange={(e) => setSession({ ...session, tagModel: e.target.value })}>
+            {Object.keys(TAG_CAPACITY_BYTES).map((m) => <option key={m}>{m}</option>)}
+            <option>other</option>
+          </select>
+        </label>
+        <label className="flex flex-col">Tag label (which physical tag)<input className="border px-2 py-1" value={session.tagLabel} onChange={(e) => setSession({ ...session, tagLabel: e.target.value })} /></label>
+        <label className="flex flex-col col-span-2">Note<input className="border px-2 py-1" value={session.note} onChange={(e) => setSession({ ...session, note: e.target.value })} placeholder="anything unusual about this session" /></label>
+        <label className="flex flex-col">Tag unit cost (₹)<input className="border px-2 py-1" value={session.tagCostInr} onChange={(e) => setSession({ ...session, tagCostInr: e.target.value })} /></label>
+      </section>
+
+      {/* Single trial */}
+      <section className="border rounded p-3 space-y-2">
+        <h2 className="font-semibold">3. Single trial</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{(Object.keys(FACTORS) as FactorKey[]).map(select)}</div>
+        <label className="text-sm flex flex-col">Trial type
+          <select className="border rounded px-2 py-1" value={trialType} onChange={(e) => setTrialType(e.target.value as TrialType)}>
+            {(Object.keys(TRIAL_TYPES) as TrialType[]).map((t) => <option key={t} value={t}>{TRIAL_TYPES[t].label} — needs {TRIAL_TYPES[t].needs}</option>)}
+          </select>
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          <button className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50" disabled={running || !support.supported} onClick={() => runTrial(trialType, condition, null)}>Run trial</button>
+          <button className="border px-4 py-2 rounded disabled:opacity-50" disabled={!running} onClick={cancel}>Cancel</button>
+          <button className="border px-3 py-2 rounded text-sm disabled:opacity-50" disabled={running || !support.supported} onClick={prepareTamperedTag}>Setup: write tampered tag</button>
+          <button className="border border-red-300 text-red-700 px-3 py-2 rounded text-sm disabled:opacity-50" disabled={running || !canMakeReadOnly()} onClick={lockTag}>Lock tag read-only…</button>
         </div>
-        <p className="text-sm text-slate-700 min-h-[1.5em]">{status}</p>
       </section>
 
-      <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Recorded trials: {trials.length} ({trials.filter((t) => t.trialType === "read").length} read, {trials.filter((t) => t.trialType === "write").length} write, {trials.filter((t) => !t.success).length} failed)</h2>
-        <div className="flex gap-3">
-          <button className="border px-3 py-1 rounded" onClick={downloadCsv}>Export CSV</button>
-          <button className="border px-3 py-1 rounded" onClick={postTrialsToBenchmarkEndpoint}>POST all to backend</button>
-          <button className="border px-3 py-1 rounded text-red-700" onClick={() => persist([])}>Clear all trials</button>
+      {/* Planned run */}
+      <section className="border rounded p-3 space-y-2">
+        <h2 className="font-semibold">4. Planned run (randomized full factorial)</h2>
+        <p className="text-xs text-slate-500">Tick the levels to vary; unticked factors use the single-trial settings above. Order is randomized so tag wear or fatigue is not confounded with any condition.</p>
+        {(Object.keys(FACTORS) as FactorKey[]).map((key) => (
+          <div key={key} className="text-sm">
+            <span className="font-medium mr-2">{FACTORS[key].label}:</span>
+            {FACTORS[key].levels.map((l) => (
+              <label key={l} className="mr-3 whitespace-nowrap">
+                <input type="checkbox" checked={!!varied[key]?.includes(l)}
+                  onChange={(e) => setVaried({ ...varied, [key]: e.target.checked ? [...(varied[key] || []), l] : (varied[key] || []).filter((x) => x !== l) })} />{" "}
+                {key === "distanceCm" ? `${l} cm` : l}
+              </label>
+            ))}
+          </div>
+        ))}
+        <div className="text-sm">
+          <span className="font-medium mr-2">Trial types:</span>
+          {(Object.keys(TRIAL_TYPES) as TrialType[]).map((t) => (
+            <label key={t} className="mr-3 whitespace-nowrap">
+              <input type="checkbox" checked={planTypes.includes(t)} onChange={(e) => setPlanTypes(e.target.checked ? [...planTypes, t] : planTypes.filter((x) => x !== t))} /> {TRIAL_TYPES[t].label}
+            </label>
+          ))}
         </div>
+        <label className="text-sm">Repetitions per cell <input type="number" min={1} className="border w-16 px-1" value={reps} onChange={(e) => setReps(Math.max(1, Number(e.target.value) || 1))} /></label>
+        <div>
+          <button className="border px-3 py-1 rounded" onClick={() => {
+            const seed = Math.floor(Math.random() * 1e9);
+            setPlan({ steps: buildPlan(varied, condition, planTypes, reps, seed), pos: 0, seed });
+          }}>Generate plan</button>
+          {plan && <button className="border px-3 py-1 rounded ml-2 text-red-700" onClick={() => setPlan(null)}>Discard plan</button>}
+        </div>
+        {plan && (
+          <div className="bg-slate-50 rounded p-2 text-sm space-y-1">
+            <p>Step {Math.min(plan.pos + 1, plan.steps.length)} of {plan.steps.length} (seed {plan.seed})</p>
+            <div className="w-full bg-slate-200 h-2 rounded"><div className="bg-blue-600 h-2 rounded" style={{ width: pct(plan.pos / plan.steps.length) }} /></div>
+            {nextStep ? (
+              <>
+                <p className="font-medium">Next: {TRIAL_TYPES[nextStep.trialType].label} — use {TRIAL_TYPES[nextStep.trialType].needs}</p>
+                <p>Set up: {nextStep.condition.distanceCm} cm, {nextStep.condition.orientation}, {nextStep.condition.medium}, {nextStep.condition.placement}; payload {nextStep.condition.profile}, {nextStep.condition.format}</p>
+                <div className="flex gap-2">
+                  <button className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50" disabled={running || !support.supported} onClick={() => runTrial(nextStep.trialType, nextStep.condition, nextStep.index)}>Run step</button>
+                  <button className="border px-3 py-2 rounded" disabled={running} onClick={() => setPlan({ ...plan, pos: plan.pos + 1 })}>Skip</button>
+                </div>
+              </>
+            ) : <p className="font-medium text-green-700">Plan complete. Export the results below.</p>}
+          </div>
+        )}
       </section>
 
-      <section className="border rounded p-4 space-y-2">
-        <h2 className="font-semibold">Mobile crypto/compression latency</h2>
-        <button className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-50" onClick={runMobileCryptoLatency} disabled={cryptoRunning}>
-          {cryptoRunning ? "Running (100 iterations)..." : "Run crypto latency benchmark"}
-        </button>
-        {cryptoResult && (
+      <p className="text-sm min-h-[1.5em] font-medium" data-testid="lab-status">{status}</p>
+
+      {/* Results */}
+      <section className="border rounded p-3 space-y-2">
+        <h2 className="font-semibold">5. Results ({trials.length} trials, {trials.filter((t) => t.outcomeMatched).length} passed)</h2>
+        <div className="text-xs">
+          Group by:{" "}
+          {SUMMARY_KEYS.map((k) => (
+            <label key={k} className="mr-2"><input type="checkbox" checked={groupBy.includes(k)} onChange={(e) => setGroupBy(e.target.checked ? [...groupBy, k] : groupBy.filter((g) => g !== k))} /> {k}</label>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full border">
+            <thead><tr>{[...groupBy, "n", "pass", "95% CI", "median ms", "p95 ms", "attempts", "top error"].map((h) => <th key={String(h)} className="border px-1">{String(h)}</th>)}</tr></thead>
+            <tbody>
+              {summary.map((r, i) => (
+                <tr key={i}>
+                  {groupBy.map((g) => <td key={String(g)} className="border px-1">{r.key[g as string]}</td>)}
+                  <td className="border px-1">{r.n}</td>
+                  <td className="border px-1">{r.matched}/{r.n} ({pct(r.rate)})</td>
+                  <td className="border px-1">{pct(r.ci95[0])}–{pct(r.ci95[1])}</td>
+                  <td className="border px-1">{ms(r.medianNfcMs)}</td>
+                  <td className="border px-1">{ms(r.p95NfcMs)}</td>
+                  <td className="border px-1">{r.meanAttempts?.toFixed(2) ?? "–"}</td>
+                  <td className="border px-1">{r.topError}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button className="border px-3 py-1 rounded" onClick={() => download(toCsv(trials), `nfc-lab-${session.sessionId}.csv`, "text/csv")}>Export CSV</button>
+          <button className="border px-3 py-1 rounded" onClick={() => download(JSON.stringify({ session, device, env, groupBy, summary }, null, 2), `nfc-lab-summary-${session.sessionId}.json`, "application/json")}>Export summary JSON</button>
+          <button className="border px-3 py-1 rounded text-red-700" onClick={() => window.confirm("Delete all recorded trials on this device?") && setTrials([])}>Clear trials</button>
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer">Last 15 trials</summary>
+          <ul className="font-mono">
+            {trials.slice(-15).reverse().map((t) => (
+              <li key={t.id}>{t.outcomeMatched ? "PASS" : "FAIL"} {t.trialType} {t.format} {t.distanceCm}cm {t.orientation} {t.medium} {ms(t.nfcMs)}ms {t.errorCode}</li>
+            ))}
+          </ul>
+        </details>
+      </section>
+
+      {/* Compute latency */}
+      <section className="border rounded p-3 space-y-2">
+        <h2 className="font-semibold">6. On-device scan-path compute benchmark</h2>
+        <button className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-50" disabled={running} onClick={runLatency}>Run benchmark (no tag)</button>
+        {latency && (
           <>
-            <pre className="text-xs bg-slate-100 p-2 overflow-auto max-h-64">{JSON.stringify(cryptoResult.operations, null, 2)}</pre>
-            <button className="border px-3 py-1 rounded" onClick={() => downloadJson(cryptoResult, "crypto-latency-mobile.json")}>Download crypto-latency-mobile.json</button>
+            <pre className="text-xs bg-slate-100 p-2 overflow-auto max-h-64">{JSON.stringify(latency, null, 2)}</pre>
+            <button className="border px-3 py-1 rounded" onClick={() => download(JSON.stringify(latency, null, 2), "crypto-latency-mobile.json", "application/json")}>Download crypto-latency-mobile.json</button>
           </>
         )}
       </section>

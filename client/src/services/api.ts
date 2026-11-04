@@ -1,9 +1,38 @@
 import { tokenStorage } from '@/utils/tokenStorage';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1';
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Exchanges the HttpOnly refresh cookie for a new in-memory access token.
+ * Concurrent callers share one request so a burst of 401s triggers a single refresh.
+ */
+export const refreshAccessToken = (): Promise<boolean> => {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (data.success && data.data?.token) {
+          tokenStorage.setToken(data.data.token);
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+};
 
 export const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
-  let token = tokenStorage.getToken();
+  // After a page reload the in-memory token is gone; restore it from the cookie first.
+  if (!tokenStorage.getToken()) await refreshAccessToken();
 
   const getHeaders = (t: string | null) => ({
     'Content-Type': 'application/json',
@@ -13,42 +42,21 @@ export const fetchWithAuth = async (endpoint: string, options: RequestInit = {})
 
   let response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
-    headers: getHeaders(token)
+    headers: getHeaders(tokenStorage.getToken())
   });
 
-  // Intercept 401 Unauthorized for token refresh
+  // Access token expired: refresh once via the cookie and retry
   if (response.status === 401) {
-    const refreshToken = tokenStorage.getRefreshToken();
-    if (refreshToken) {
-      try {
-        const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken })
-        });
-        
-        if (refreshResponse.ok) {
-          const data = await refreshResponse.json();
-          if (data.success && data.data && data.data.token) {
-            // Save new access token
-            tokenStorage.setToken(data.data.token);
-            token = data.data.token;
-            
-            // Retry original request
-            response = await fetch(`${API_URL}${endpoint}`, {
-              ...options,
-              headers: getHeaders(token)
-            });
-          }
-        } else {
-          // Refresh failed (e.g., revoked or expired refresh token)
-          tokenStorage.clearTokens();
-          // Force a reload to trigger auth state reset (optional, but robust)
-          window.location.href = '/login';
-        }
-      } catch (e) {
-        console.error('Failed to refresh token', e);
-      }
+    if (await refreshAccessToken()) {
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: getHeaders(tokenStorage.getToken())
+      });
+    } else {
+      // Refresh cookie missing, expired or revoked
+      tokenStorage.clearTokens();
+      localStorage.removeItem('aegistagUser');
+      window.location.href = '/login';
     }
   }
 
@@ -61,9 +69,11 @@ export const fetchWithoutAuth = async (endpoint: string, options: RequestInit = 
     ...options.headers,
   };
 
+  // credentials: 'include' lets login/signup store the HttpOnly refresh cookie
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
-    headers
+    headers,
+    credentials: 'include',
   });
 
   return response.json();

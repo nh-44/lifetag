@@ -1,12 +1,12 @@
-# LifeTag - LLM Developer & Architecture Guide
+# AegisTag - LLM Developer & Architecture Guide
 
-This document is designed for LLMs (and developers) to quickly understand the LifeTag repository structure, codebase architecture, schema definitions, and design patterns. Read this first before modifying or adding features to this workspace.
+This document is designed for LLMs (and developers) to quickly understand the AegisTag repository structure, codebase architecture, schema definitions, and design patterns. Read this first before modifying or adding features to this workspace.
 
 ---
 
 ## 🏗️ System Architecture Overview
 
-LifeTag is a full-stack, decoupled monorepo composed of a modern frontend client and a secure, audited Express backend.
+AegisTag is a full-stack, decoupled monorepo composed of a modern frontend client and a secure, audited Express backend.
 
 ```
                   ┌───────────────────────────────┐

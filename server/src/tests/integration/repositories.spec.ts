@@ -1,7 +1,7 @@
 /**
  * §3.7 — Repository integration tests
  *
- * Hits the real test DB (lifetag_test). Each test gets a clean state via
+ * Hits the real test DB (aegistag_test). Each test gets a clean state via
  * cleanDb() in beforeEach.
  *
  * 24-hour boundary is tested here at the repository layer to isolate whether
@@ -252,6 +252,19 @@ describe('scanAuditRepository.checkRecentScan', () => {
 
   it('returns false for the same doctor scanning a DIFFERENT patient', async () => {
     await seedScanAuditLog({ scannedBy: SCANNER, patientAccount: '99999' }); // different patient
+    const result = await scanAuditRepository.checkRecentScan(SCANNER, PATIENT, 24);
+    expect(result).toBe(false);
+  });
+
+  it('REGRESSION: returns false for an uncertified scan even if deviceMeta claims certification', async () => {
+    // deviceMeta is client-supplied free text. The consent gate used to match it with
+    // `contains: '[Authority-Certified]'`, so a self-signed scan could unlock records.
+    await seedScanAuditLog({
+      scannedBy: SCANNER,
+      patientAccount: PATIENT,
+      deviceMeta: 'attacker [Authority-Certified]',
+      certified: false,
+    });
     const result = await scanAuditRepository.checkRecentScan(SCANNER, PATIENT, 24);
     expect(result).toBe(false);
   });

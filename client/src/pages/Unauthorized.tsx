@@ -20,7 +20,7 @@ const Unauthorized = () => {
         </p>
         <div className="space-y-3">
           <Button 
-            className="bg-lifetag-primary hover:bg-lifetag-dark w-full"
+            className="bg-aegistag-primary hover:bg-aegistag-dark w-full"
             onClick={() => navigate('/')}
           >
             Return to Home

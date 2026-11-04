@@ -5,7 +5,8 @@ export type TrustStatus =
   | 'self-signed'
   | 'failed'
   | 'loading'
-  | 'server-verified';
+  | 'server-verified'
+  | 'unsigned';
 
 interface TrustBadgeProps {
   status: TrustStatus;
@@ -51,11 +52,21 @@ const config: Record<Exclude<TrustStatus, 'loading'>, {
     iconClass: 'text-red-600',
     textClass: 'text-red-800',
   },
+  unsigned: {
+    icon: ShieldX,
+    label: 'Unsigned Tag',
+    description:
+      'This tag carries no signature, so its contents cannot be trusted. Look the patient up online or treat as unknown.',
+    bgClass: 'bg-red-50',
+    borderClass: 'border-red-500',
+    iconClass: 'text-red-600',
+    textClass: 'text-red-800',
+  },
   'server-verified': {
     icon: Shield,
     label: 'Verified via Server',
     description:
-      'Data was retrieved from the LifeTag server. Authority registration status shown below.',
+      'Shown from the AegisTag server over an authenticated connection (not read from a tag).',
     bgClass: 'bg-blue-50',
     borderClass: 'border-blue-500',
     iconClass: 'text-blue-600',

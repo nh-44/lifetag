@@ -1,168 +1,127 @@
 import { NfcTagPayload } from "@/types";
 
+/** Tag format v3: the patient ID and issuedAt are signed together with the triage data. Must match server/src/services/nfc.service.ts. */
+export const TAG_FORMAT_VERSION = "3.0";
+
+type TriageData = NfcTagPayload["triageData"];
+type PublicPoint = { x: string; y: string };
+
 /**
- * LifeTag Zero-Trust Cryptographic & NFC Payload Engine
+ * Called during issuance with the freshly generated public key and the tag's
+ * issuedAt (unix seconds); resolves to the Healthcare Authority certificate.
+ * In the app this is userService.certifyTagKey, which only a DOCTOR may call.
+ */
+export type CertifyFn = (publicKey: PublicPoint, issuedAt: number) => Promise<string>;
+
+// Offline trust anchors. Must be the public half of the server's AUTHORITY_PRIVATE_KEY:
+// run `npx ts-node scripts/print-authority-public-key.ts` in server/ and set
+// VITE_AUTHORITY_PUBLIC_KEYS in client/.env. Several keys may be listed during rotation.
+const DEFAULT_AUTHORITY_PUBLIC_KEYS: PublicPoint[] = [
+  { x: "Uc4y1v9im9DwBm1ZBB2sRvV16C1ydaMibBkUJpV0Bnk", y: "TqNtq2pxdFWi_5U1sWLcanbR_1zkM3sFojb0_UYn4Us" },
+];
+
+const BLOOD_GROUP_LONG: Record<string, string> = {
+  "O-": "O-Negative", "O+": "O-Positive",
+  "A-": "A-Negative", "A+": "A-Positive",
+  "B-": "B-Negative", "B+": "B-Positive",
+  "AB-": "AB-Negative", "AB+": "AB-Positive",
+};
+
+const ECDSA_SIGN = { name: "ECDSA", hash: { name: "SHA-256" } } as const;
+const P256 = { name: "ECDSA", namedCurve: "P-256" } as const;
+
+const toBase64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const fromBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+/**
+ * AegisTag Zero-Trust Cryptographic & NFC Payload Engine
  * Implements real ECDSA signatures, native Gzip compression, and two-tier Trusted Authority Verification.
  */
 export class NfcCryptoService {
-  private static KEY_STORAGE_KEY = "lifetag_ecdsa_keypair";
-
-  // Pre-generated static Healthcare Authority P-256 ECDSA public key for verifications (offline trust anchor)
-  private static AUTHORITY_PUBLIC_KEY_JWK = {
-    kty: "EC",
-    crv: "P-256",
-    x: "Uc4y1v9im9DwBm1ZBB2sRvV16C1ydaMibBkUJpV0Bnk",
-    y: "TqNtq2pxdFWi_5U1sWLcanbR_1zkM3sFojb0_UYn4Us",
-  };
-
-  private static DB_NAME = "LifeTagCryptoDB";
-  private static STORE_NAME = "keys";
-  private static KEY_ID = "ecdsa_keypair";
-
-  private static async getDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      if (typeof window === "undefined" || !window.indexedDB) {
-        return reject(new Error("indexedDB is not available"));
+  static getAuthorityPublicKeys(): PublicPoint[] {
+    const configured = import.meta.env.VITE_AUTHORITY_PUBLIC_KEYS;
+    if (configured) {
+      try {
+        const keys = JSON.parse(configured);
+        if (Array.isArray(keys) && keys.length > 0) return keys;
+      } catch {
+        console.error("VITE_AUTHORITY_PUBLIC_KEYS is not a JSON array of {x, y}; using the built-in key");
       }
-      const request = window.indexedDB.open(this.DB_NAME, 1);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-          db.createObjectStore(this.STORE_NAME);
-        }
-      };
-    });
+    }
+    return DEFAULT_AUTHORITY_PUBLIC_KEYS;
   }
 
-  private static async getStoredKeyPair(): Promise<CryptoKeyPair | null> {
-    try {
-      const db = await this.getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(this.STORE_NAME, "readonly");
-        const store = transaction.objectStore(this.STORE_NAME);
-        const request = store.get(this.KEY_ID);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result || null);
-      });
-    } catch (e) {
-      return null;
-    }
+  /** The exact triage object that is signed; see canonicalTriage in the server's nfc.service.ts. */
+  static canonicalTriage(t: TriageData): TriageData {
+    return {
+      name: t.name,
+      bloodGroup: BLOOD_GROUP_LONG[t.bloodGroup] || t.bloodGroup,
+      allergies: (t.allergies || []).filter(
+        (a) => a.toLowerCase() !== "none" && a.toLowerCase() !== "no allergies"
+      ),
+      emergencyContacts: (t.emergencyContacts || []).map((c) => ({ userId: c.userId, name: c.name })),
+      dnrStatus: !!t.dnrStatus,
+    };
   }
 
-  private static async storeKeyPair(keyPair: CryptoKeyPair): Promise<void> {
-    try {
-      const db = await this.getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(this.STORE_NAME, "readwrite");
-        const store = transaction.objectStore(this.STORE_NAME);
-        const request = store.put(keyPair, this.KEY_ID);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
-      });
-    } catch (e) {
-      console.warn("Skipping key storage due to DB error:", e);
-    }
+  static issuedAtSeconds(isoTimestamp: string): number {
+    return Math.floor(new Date(isoTimestamp).getTime() / 1000);
+  }
+
+  static contentSigningString(p: Pick<NfcTagPayload, "version" | "fhirPatientId" | "timestamp" | "triageData">): string {
+    return JSON.stringify([
+      "aegistag-content-v3",
+      p.version,
+      p.fhirPatientId,
+      this.issuedAtSeconds(p.timestamp),
+      this.canonicalTriage(p.triageData),
+    ]);
+  }
+
+  static certSigningString(fhirPatientId: string, issuedAt: number, x: string, y: string): string {
+    return JSON.stringify(["aegistag-cert-v3", fhirPatientId, issuedAt, x, y]);
   }
 
   /**
-   * Generates a persistent ECDSA P-256 key pair in IndexedDB (representing the patient's local wallet)
+   * Builds a signed v3 tag payload. Every issuance uses a fresh, non-extractable
+   * key pair that exists only for the duration of this call: nothing is stored on
+   * the issuing (staff) device, so there is no long-lived private key to steal.
+   * Re-writing a patient's tag means a new key, a new certificate and a new
+   * issuedAt, which supersedes every earlier tag server-side.
    */
-  static async getOrCreateKeyPair(): Promise<CryptoKeyPair> {
-    try {
-      // Migrate from localStorage if it exists (one-time migration)
-      if (typeof window !== "undefined" && window.localStorage) {
-        const legacyStored = localStorage.getItem(this.KEY_STORAGE_KEY);
-        if (legacyStored) {
-          try {
-            const parsed = JSON.parse(legacyStored);
-            const privateKey = await window.crypto.subtle.importKey(
-              "jwk",
-              parsed.privateKey,
-              { name: "ECDSA", namedCurve: "P-256" },
-              false, // Make it non-extractable in memory now
-              ["sign"]
-            );
-            const publicKey = await window.crypto.subtle.importKey(
-              "jwk",
-              parsed.publicKey,
-              { name: "ECDSA", namedCurve: "P-256" },
-              true, // Public key is always extractable
-              ["verify"]
-            );
-            const legacyKeyPair = { privateKey, publicKey };
-            await this.storeKeyPair(legacyKeyPair);
-            localStorage.removeItem(this.KEY_STORAGE_KEY);
-            return legacyKeyPair;
-          } catch (e) {
-            console.warn("Legacy key migration failed, starting fresh.");
-            localStorage.removeItem(this.KEY_STORAGE_KEY);
-          }
-        }
-      }
+  static async generateTagPayload(
+    patientData: {
+      name: string;
+      bloodGroup: string;
+      allergies: string[];
+      emergencyContacts: Array<{ userId: string; name: string }>;
+      dnrStatus: boolean;
+      fhirPatientId: string;
+    },
+    certify?: CertifyFn
+  ): Promise<NfcTagPayload> {
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const keyPair = await window.crypto.subtle.generateKey(P256, false, ["sign", "verify"]);
+    const { x, y } = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
+    if (!x || !y) throw new Error("Failed to export the tag public key");
 
-      const storedKeyPair = await this.getStoredKeyPair();
-      if (storedKeyPair) {
-        return storedKeyPair;
-      }
-    } catch (e) {
-      console.warn("Failed to load stored keypair from IndexedDB, generating new one", e);
-    }
-
-    const keyPair = await window.crypto.subtle.generateKey(
-      { name: "ECDSA", namedCurve: "P-256" },
-      false, // extractable: false prevents XSS from stealing the private key
-      ["sign", "verify"]
-    );
-
-    await this.storeKeyPair(keyPair);
-
-    return keyPair;
-  }
-
-  /**
-   * Encodes a patient emergency record into an NDEF-compatible signed JSON payload with two-tier signatures
-   */
-  static async generateTagPayload(patientData: {
-    name: string;
-    bloodGroup: string;
-    allergies: string[];
-    emergencyContacts: Array<{ userId: string; name: string }>;
-    dnrStatus: boolean;
-    fhirPatientId: string;
-    authoritySignature?: string;
-  }): Promise<NfcTagPayload> {
     const payload: NfcTagPayload = {
-      version: '2.0',
-      timestamp: new Date().toISOString(),
+      version: TAG_FORMAT_VERSION,
+      timestamp: new Date(issuedAt * 1000).toISOString(),
       fhirPatientId: patientData.fhirPatientId,
-      triageData: {
-        name: patientData.name,
-        bloodGroup: patientData.bloodGroup,
-        allergies: patientData.allergies,
-        emergencyContacts: patientData.emergencyContacts,
-        dnrStatus: patientData.dnrStatus,
-      },
+      triageData: this.canonicalTriage(patientData),
+      tagId: JSON.stringify({ kty: "EC", crv: "P-256", x, y }),
     };
 
-    // 1. Retrieve patient's local key pair
-    const keyPair = await this.getOrCreateKeyPair();
-    const patientPublicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
-    payload.tagId = JSON.stringify(patientPublicKeyJwk);
-
-    // 2. Sign triageData using patient's private key
-    const triageDataBytes = new TextEncoder().encode(JSON.stringify(payload.triageData));
-    const patientSignatureBuffer = await window.crypto.subtle.sign(
-      { name: "ECDSA", hash: { name: "SHA-256" } },
+    const signature = await window.crypto.subtle.sign(
+      ECDSA_SIGN,
       keyPair.privateKey,
-      triageDataBytes
+      new TextEncoder().encode(this.contentSigningString(payload))
     );
-    payload.signature = btoa(String.fromCharCode(...new Uint8Array(patientSignatureBuffer)));
+    payload.signature = toBase64(signature);
 
-    // 3. Attach Authority certification from backend (if available)
-    if (patientData.authoritySignature) {
-      payload.authoritySignature = patientData.authoritySignature;
+    if (certify) {
+      payload.authoritySignature = await certify({ x, y }, issuedAt);
     }
 
     return payload;
@@ -179,56 +138,45 @@ export class NfcCryptoService {
     if (!payload.signature || !payload.tagId) {
       return { verified: false, trustedAuthority: false, error: "Missing signature components" };
     }
+    if (payload.version !== TAG_FORMAT_VERSION) {
+      return {
+        verified: false,
+        trustedAuthority: false,
+        error: `Unsupported tag format ${payload.version}; this tag must be re-issued`,
+      };
+    }
 
     try {
-      // Step 1: Import patient public key from tag payload
-      const patientPublicKeyJwk = JSON.parse(payload.tagId);
-      const patientPublicKey = await window.crypto.subtle.importKey(
-        "jwk",
-        patientPublicKeyJwk,
-        { name: "ECDSA", namedCurve: "P-256" },
-        true,
-        ["verify"]
-      );
-
-      // Step 2: Verify Patient Signature over Triage Data
-      const patientSignatureBytes = new Uint8Array(
-        atob(payload.signature).split("").map((c) => c.charCodeAt(0))
-      );
-      const triageDataBytes = new TextEncoder().encode(JSON.stringify(payload.triageData));
-
+      // Step 1: Verify the patient-key signature over patient ID + issuedAt + triage data
+      const { x, y } = JSON.parse(payload.tagId);
+      const tagKey = await window.crypto.subtle.importKey("jwk", { kty: "EC", crv: "P-256", x, y }, P256, false, ["verify"]);
       const isPatientVerified = await window.crypto.subtle.verify(
-        { name: "ECDSA", hash: { name: "SHA-256" } },
-        patientPublicKey,
-        patientSignatureBytes,
-        triageDataBytes
+        ECDSA_SIGN,
+        tagKey,
+        fromBase64(payload.signature),
+        new TextEncoder().encode(this.contentSigningString(payload))
       );
 
       if (!isPatientVerified) {
         return { verified: false, trustedAuthority: false, error: "Patient signature invalid (tampered triage data)" };
       }
 
-      // Step 3: Verify Authority Certificate (if present) to prevent spoofing
+      // Step 2: Verify the Authority certificate binding this key to this patient and issuance
       let isAuthorityVerified = false;
       if (payload.authoritySignature) {
-        const authorityPublicKey = await window.crypto.subtle.importKey(
-          "jwk",
-          this.AUTHORITY_PUBLIC_KEY_JWK,
-          { name: "ECDSA", namedCurve: "P-256" },
-          true,
-          ["verify"]
+        const certBytes = new TextEncoder().encode(
+          this.certSigningString(payload.fhirPatientId, this.issuedAtSeconds(payload.timestamp), x, y)
         );
-        const authoritySignatureBytes = new Uint8Array(
-          atob(payload.authoritySignature).split("").map((c) => c.charCodeAt(0))
-        );
-        const publicKeyStringBytes = new TextEncoder().encode(payload.tagId);
-
-        isAuthorityVerified = await window.crypto.subtle.verify(
-          { name: "ECDSA", hash: { name: "SHA-256" } },
-          authorityPublicKey,
-          authoritySignatureBytes,
-          publicKeyStringBytes
-        );
+        const certSignature = fromBase64(payload.authoritySignature);
+        for (const anchor of this.getAuthorityPublicKeys()) {
+          const authorityKey = await window.crypto.subtle.importKey(
+            "jwk", { kty: "EC", crv: "P-256", x: anchor.x, y: anchor.y }, P256, false, ["verify"]
+          );
+          if (await window.crypto.subtle.verify(ECDSA_SIGN, authorityKey, certSignature, certBytes)) {
+            isAuthorityVerified = true;
+            break;
+          }
+        }
       }
 
       return {
@@ -270,7 +218,7 @@ export class NfcCryptoService {
   static toShortFormat(payload: NfcTagPayload): any {
     let kStr = payload.tagId;
     try {
-      const jwk = JSON.parse(payload.tagId);
+      const jwk = JSON.parse(payload.tagId || "");
       if (jwk.x && jwk.y) {
         kStr = `${jwk.x}.${jwk.y}`;
       }
@@ -328,7 +276,10 @@ export class NfcCryptoService {
       });
     }
 
-    const timestamp = short.t ? new Date(short.t * 1000).toISOString() : new Date().toISOString();
+    // A missing timestamp stays invalid rather than defaulting to "now": issuedAt
+    // is signed, and silently substituting the current time would make a stale
+    // or truncated tag look freshly issued.
+    const timestamp = short.t ? new Date(short.t * 1000).toISOString() : "";
 
     const bgMapInv: Record<string, string> = {
       "O-": "O-Negative", "O+": "O-Positive",
@@ -338,12 +289,8 @@ export class NfcCryptoService {
     };
     const fullBg = bgMapInv[short.d.b] || short.d.b;
 
-    // Must stay [] (not a placeholder like "None") for an empty list: the
-    // patient signature was computed over the original triageData before
-    // toShortFormat's cleanup ran, so reconstructing anything other than the
-    // exact original value here breaks verifyTagIntegrity for every patient
-    // with no listed allergies. A "None" placeholder belongs in display
-    // logic, not in data that must byte-for-byte match what was signed.
+    // Must stay [] (not a placeholder like "None") for an empty list; a "None"
+    // placeholder belongs in display logic, not in data that is signed.
     const allergies = short.d.a;
 
     return {
@@ -395,7 +342,7 @@ export class NfcCryptoService {
   }
 
   /**
-   * Reconstructs standard HL7 FHIR JSON structures from the compressed LifeTag format
+   * Reconstructs standard HL7 FHIR JSON structures from the compressed AegisTag format
    */
   static convertToFhir(triageData: NfcTagPayload["triageData"], patientId: string): {
     fhirPatient: any;

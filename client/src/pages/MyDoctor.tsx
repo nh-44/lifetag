@@ -76,7 +76,7 @@ const MyDoctor = () => {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lifetag-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aegistag-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading doctor information...</p>
         </div>
       </div>
@@ -99,9 +99,9 @@ const MyDoctor = () => {
           <div className="space-y-6">
             {userProfile.primaryPhysician && userProfile.primaryPhysician.userId ? (
               <Card>
-                <CardHeader className="bg-lifetag-light">
+                <CardHeader className="bg-aegistag-light">
                   <CardTitle className="flex items-center">
-                    <UserCheck className="h-5 w-5 mr-2 text-lifetag-primary" />
+                    <UserCheck className="h-5 w-5 mr-2 text-aegistag-primary" />
                     Primary Physician
                   </CardTitle>
                   <CardDescription>Your registered doctor</CardDescription>
@@ -128,7 +128,7 @@ const MyDoctor = () => {
                         
                         <div className="pt-2">
                           <div className="flex items-center mb-2">
-                            <Building className="h-4 w-4 mr-2 text-lifetag-primary" />
+                            <Building className="h-4 w-4 mr-2 text-aegistag-primary" />
                             <h3 className="text-sm font-medium text-gray-500">Hospital/Clinic</h3>
                           </div>
                           <p className="text-lg font-medium">{doctorProfile.hospitalClinic || 'Not specified'}</p>
@@ -136,7 +136,7 @@ const MyDoctor = () => {
                         
                         <div className="pt-2">
                           <div className="flex items-center mb-2">
-                            <Award className="h-4 w-4 mr-2 text-lifetag-primary" />
+                            <Award className="h-4 w-4 mr-2 text-aegistag-primary" />
                             <h3 className="text-sm font-medium text-gray-500">Specialty</h3>
                           </div>
                           <p className="text-lg font-medium">{doctorProfile.specialty || 'Not specified'}</p>
@@ -175,7 +175,7 @@ const MyDoctor = () => {
                 Return to Home
               </Button>
               <Button 
-                className="bg-lifetag-primary hover:bg-lifetag-dark"
+                className="bg-aegistag-primary hover:bg-aegistag-dark"
                 onClick={() => navigate('/edit-profile')}
               >
                 Update Doctor

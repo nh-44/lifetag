@@ -1,10 +1,10 @@
-# LifeTag - Folder Structure
+# AegisTag - Folder Structure
 
-This document outlines the comprehensive folder structure for the LifeTag project. It serves as a navigational guide for developers to understand the separation of concerns, the architectural patterns applied (like Clean Architecture in the backend), and where to locate specific components across both the React frontend and the Express/Prisma backend.
+This document outlines the comprehensive folder structure for the AegisTag project. It serves as a navigational guide for developers to understand the separation of concerns, the architectural patterns applied (like Clean Architecture in the backend), and where to locate specific components across both the React frontend and the Express/Prisma backend.
 
 ## Root Folder Structure
 ```
-lifetag/
+aegistag/
 ├── client/                         # React + Vite frontend
 ├── docs/                           # Project Documentation
 ├── server/                         # Express + Prisma backend

@@ -5,7 +5,7 @@ import { connectDatabase, disconnectDatabase } from './config/database';
 const PORT = parseInt(env.PORT, 10) || 5000;
 
 async function startServer() {
-	console.log('🚀 Starting LifeTag Express Server...');
+	console.log('🚀 Starting AegisTag Express Server...');
 
 	// Attempt database connection
 	await connectDatabase();

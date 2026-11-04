@@ -2,7 +2,7 @@
  * §5 — Auth API integration tests
  *
  * Full-stack tests using supertest against the real Express app and the real
- * test DB (lifetag_test). Each test starts with a clean DB state.
+ * test DB (aegistag_test). Each test starts with a clean DB state.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
@@ -10,6 +10,7 @@ import app from '../../app';
 import { cleanDb, seedUser, seedDoctor, testPrisma } from '../helpers/testDb';
 import { makeRefreshToken, makeToken, makeAuthHeader } from '../helpers/authHelpers';
 import { Role } from '../../constants/roles';
+import { hashRefreshToken } from '../../utils/jwt.utils';
 
 beforeEach(async () => {
   await cleanDb();
@@ -35,7 +36,7 @@ describe('GET /api/v1/auth/check/:userId', () => {
 // ─── Signup ───────────────────────────────────────────────────────────────────
 
 describe('POST /api/v1/auth/signup', () => {
-  it('signs up a new USER and returns 201 with token + refreshToken + user (no password)', async () => {
+  it('signs up a new USER and returns 201 with token + user (no password), refresh token only in an HttpOnly cookie', async () => {
     const res = await request(app)
       .post('/api/v1/auth/signup')
       .send({
@@ -49,7 +50,10 @@ describe('POST /api/v1/auth/signup', () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('token');
-    expect(res.body.data).toHaveProperty('refreshToken');
+    expect(res.body.data).not.toHaveProperty('refreshToken');
+    const setCookie = ([] as string[]).concat(res.headers['set-cookie'] || []).join(';');
+    expect(setCookie).toMatch(/aegistag_rt=/);
+    expect(setCookie).toMatch(/HttpOnly/i);
     expect(res.body.data.user).not.toHaveProperty('password');
     expect(res.body.data.user.role).toBe('USER');
   });
@@ -117,7 +121,7 @@ describe('POST /api/v1/auth/signup', () => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 describe('POST /api/v1/auth/login', () => {
-  it('logs in with correct credentials and returns token + refreshToken', async () => {
+  it('logs in with correct credentials and returns token, with the refresh token only in an HttpOnly cookie', async () => {
     const { user, plainPassword } = await seedUser({ userId: 'US61001' });
 
     const res = await request(app)
@@ -126,7 +130,10 @@ describe('POST /api/v1/auth/login', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveProperty('token');
-    expect(res.body.data).toHaveProperty('refreshToken');
+    expect(res.body.data).not.toHaveProperty('refreshToken');
+    const setCookie = ([] as string[]).concat(res.headers['set-cookie'] || []).join(';');
+    expect(setCookie).toMatch(/aegistag_rt=/);
+    expect(setCookie).toMatch(/HttpOnly/i);
     expect(res.body.data.user).not.toHaveProperty('password');
   });
 
@@ -195,7 +202,7 @@ describe('POST /api/v1/auth/refresh', () => {
     const { user } = await seedUser({ userId: 'US63001', accountId: '63001' });
     const rt = makeRefreshToken(user.userId, Role.USER);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await testPrisma.refreshToken.create({ data: { token: rt, userId: user.userId, expiresAt } });
+    await testPrisma.refreshToken.create({ data: { token: hashRefreshToken(rt), userId: user.userId, expiresAt } });
 
     const refreshRes = await request(app)
       .post('/api/v1/auth/refresh')
@@ -203,6 +210,16 @@ describe('POST /api/v1/auth/refresh', () => {
 
     expect(refreshRes.status).toBe(200);
     expect(refreshRes.body.data).toHaveProperty('token');
+    // Rotated: the new token arrives in the cookie. The old one is tolerated only for a
+    // short grace window (concurrent tabs); replaying it afterwards revokes every session.
+    expect(([] as string[]).concat(refreshRes.headers['set-cookie'] || []).join(';')).toMatch(/aegistag_rt=/);
+    await testPrisma.refreshToken.updateMany({
+      where: { token: hashRefreshToken(rt) },
+      data: { rotatedAt: new Date(Date.now() - 60_000) },
+    });
+    const replay = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: rt });
+    expect(replay.status).toBe(401);
+    expect(await testPrisma.refreshToken.count({ where: { userId: user.userId } })).toBe(0);
   });
 
   it('returns 401 "has been revoked" for a token not in the DB', async () => {
@@ -222,7 +239,7 @@ describe('POST /api/v1/auth/refresh', () => {
     const fakeToken = makeRefreshToken('US63003', Role.USER, '7d');
     await testPrisma.refreshToken.create({
       data: {
-        token: fakeToken,
+        token: hashRefreshToken(fakeToken),
         userId: 'US63003',
         expiresAt: new Date(Date.now() - 1000), // 1 second ago
       },
@@ -236,7 +253,7 @@ describe('POST /api/v1/auth/refresh', () => {
     expect(res.body.error.message).toMatch(/expired/i);
 
     // Row should have been cleaned up
-    const row = await testPrisma.refreshToken.findUnique({ where: { token: fakeToken } });
+    const row = await testPrisma.refreshToken.findUnique({ where: { token: hashRefreshToken(fakeToken) } });
     expect(row).toBeNull();
   });
 
@@ -257,7 +274,7 @@ describe('POST /api/v1/auth/logout', () => {
     const { user } = await seedUser({ userId: 'US64001', accountId: '64001' });
     const rt = makeRefreshToken(user.userId, Role.USER);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await testPrisma.refreshToken.create({ data: { token: rt, userId: user.userId, expiresAt } });
+    await testPrisma.refreshToken.create({ data: { token: hashRefreshToken(rt), userId: user.userId, expiresAt } });
 
     // Logout
     const logoutRes = await request(app)

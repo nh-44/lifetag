@@ -1,192 +1,214 @@
 /**
- * Phase 4 — Tamper detection suite.
+ * Phase 4 — Tamper detection suite (tag format v3).
  *
  * Exercises the REAL production verification code (server/src/services/nfc.service.ts
- * NfcService.verifyTagIntegrity, which calls server/src/utils/crypto.utils.ts
- * CryptoUtils.verifyEcdsaSignature — the exact functions fixed for the P1363
- * encoding bug documented in RESULTS_LOG.md), not a reimplementation.
+ * NfcService.verifyTagIntegrity + NfcService.classifyFreshness, which call
+ * server/src/utils/crypto.utils.ts CryptoUtils.verifyEcdsaSignature), not a
+ * reimplementation. Payloads are signed with the same canonical signing strings
+ * (contentSigningString / certSigningString) the client uses.
  *
- * Primary metric: `trustedAuthority`. This is the meaningful "is this tag
- * safe to treat as certified" signal per the system's own two-tier design —
- * `verified: true` alone only means "this content was signed by SOME key",
- * which is also true for a legitimate patient's own self-signed tag before
- * authority certification (see nfc.service.spec.ts's "verifies a valid
- * self-signed tag" test). A forged/tampered tag achieving `verified: true`
- * without `trustedAuthority: true` is expected and correct — the attacker
- * cannot forge the authority's certification. A forged/tampered tag
- * achieving `trustedAuthority: true` would be a real break. So "rejected"
- * for every class in this suite means `trustedAuthority !== true`, and the
- * `verified` breakdown is reported per class alongside it for full
- * diagnostic transparency — never rounded away, per the Phase 4 spec.
+ * Primary metric: a trial is ACCEPTED iff the tag is authority-certified
+ * (`trustedAuthority`) AND it is the patient's current issuance
+ * (`classifyFreshness(...) === 'current'`). That conjunction is exactly the
+ * condition under which the server logs a scan as certified, i.e. the only
+ * outcome that unlocks a doctor's consent window. `verified: true` alone means
+ * "signed by SOME key", which a legitimate self-signed tag also achieves, so it
+ * is reported per class for transparency but is not the security metric.
  *
- * N=200 per class x 8 classes (7 attacks + 1 control) = 1600 total trials.
+ * Each trial simulates the server's issuance record for the patient. Unless a
+ * class is specifically about staleness, the record matches the tag's issuedAt
+ * (so freshness is 'current' and acceptance reduces to `trustedAuthority`).
+ *
+ * N=200 per class x 13 classes (12 attacks + 1 control) = 2600 total trials.
  */
 import assert from 'assert';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { NfcService, TriagePayload } from '../server/src/services/nfc.service';
+import {
+  NfcService,
+  TriagePayload,
+  TAG_FORMAT_VERSION,
+  contentSigningString,
+  certSigningString,
+  issuedAtSeconds,
+} from '../server/src/services/nfc.service';
 import { corruptAsciiString, corruptBase64Url, corruptBufferBit } from './lib/corrupt';
 
 const N_PER_CLASS = 200;
 const AUTHORITY_KEYS = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
 
-// NfcService.verifyTagIntegrity checks authoritySignature against its own
-// hardcoded AUTHORITY_PUBLIC_KEY_JWK static field, not an injectable
-// parameter. Override it to match the throwaway AUTHORITY_KEYS generated
-// above, exactly like server/src/tests/unit/nfc.service.spec.ts does —
-// otherwise every authoritySignature this script produces (signed with
-// AUTHORITY_KEYS.privateKey) would fail Tier 2 against the real production
-// key it doesn't have the private half of.
-(NfcService as any).AUTHORITY_PUBLIC_KEY_JWK = AUTHORITY_KEYS.publicKey.export({ format: 'jwk' });
+// Trust anchor injection: the production code derives its anchor from
+// AUTHORITY_PRIVATE_KEY unless this documented override is set.
+NfcService.authorityPublicKeysOverride = [AUTHORITY_KEYS.publicKey.export({ format: 'jwk' })];
 
-function buildValidPayload(fhirPatientId: string, namePrefix: string): TriagePayload {
+type IssuanceRecord = { tagIssuedAt: Date | null; tagRevokedAt: Date | null };
+
+const sign = (key: crypto.KeyObject, data: string) =>
+  crypto.sign('sha256', Buffer.from(data, 'utf8'), { key, dsaEncoding: 'ieee-p1363' }).toString('base64');
+
+interface IssuedTag {
+  payload: TriagePayload;
+  patientPrivateKey: crypto.KeyObject;
+  record: IssuanceRecord; // server state right after this tag was issued
+}
+
+function issueTag(fhirPatientId: string, namePrefix: string, issuedAtSec = Math.floor(Date.now() / 1000)): IssuedTag {
   const patientKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  const patientPublicJwk = patientKeys.publicKey.export({ format: 'jwk' }) as { x: string; y: string };
-  const tagId = JSON.stringify({ kty: 'EC', crv: 'P-256', x: patientPublicJwk.x, y: patientPublicJwk.y });
+  const { x, y } = patientKeys.publicKey.export({ format: 'jwk' }) as { x: string; y: string };
 
-  const triageData = {
-    name: `${namePrefix} Patient`,
-    bloodGroup: 'O-Negative',
-    allergies: ['Penicillin'],
-    emergencyContacts: [{ userId: '+919876543210', name: 'Emergency Contact' }],
-    dnrStatus: false,
+  const payload: TriagePayload = {
+    version: TAG_FORMAT_VERSION,
+    timestamp: new Date(issuedAtSec * 1000).toISOString(),
+    fhirPatientId,
+    tagId: JSON.stringify({ kty: 'EC', crv: 'P-256', x, y }),
+    triageData: {
+      name: `${namePrefix} Patient`,
+      bloodGroup: 'O-Negative',
+      allergies: ['Penicillin'],
+      emergencyContacts: [{ userId: '+919876543210', name: 'Emergency Contact' }],
+      dnrStatus: false,
+    },
+    signature: '',
   };
-
-  const signature = crypto
-    .sign('sha256', Buffer.from(JSON.stringify(triageData)), { key: patientKeys.privateKey, dsaEncoding: 'ieee-p1363' })
-    .toString('base64');
-  const authoritySignature = crypto
-    .sign('sha256', Buffer.from(tagId), { key: AUTHORITY_KEYS.privateKey, dsaEncoding: 'ieee-p1363' })
-    .toString('base64');
+  payload.signature = sign(patientKeys.privateKey, contentSigningString(payload));
+  payload.authoritySignature = sign(AUTHORITY_KEYS.privateKey, certSigningString(fhirPatientId, issuedAtSec, x, y));
 
   return {
-    version: '2.0',
-    timestamp: new Date().toISOString(),
-    fhirPatientId,
-    triageData,
-    tagId,
-    signature,
-    authoritySignature,
+    payload,
+    patientPrivateKey: patientKeys.privateKey,
+    record: { tagIssuedAt: new Date(issuedAtSec * 1000), tagRevokedAt: null },
   };
 }
 
 interface TrialOutcome {
   verified: boolean;
   trustedAuthority: boolean;
+  freshness: string;
+  accepted: boolean;
   decompressionOrParseFailed?: boolean;
 }
 
-function runTrial(payload: TriagePayload): TrialOutcome {
-  const result = NfcService.verifyTagIntegrity(payload);
-  return { verified: result.verified, trustedAuthority: result.trustedAuthority };
+function runTrial(payload: TriagePayload, record: IssuanceRecord): TrialOutcome {
+  const { verified, trustedAuthority } = NfcService.verifyTagIntegrity(payload);
+  const freshness = NfcService.classifyFreshness(issuedAtSeconds(payload.timestamp), record);
+  return { verified, trustedAuthority, freshness, accepted: trustedAuthority && freshness === 'current' };
 }
 
 // --- Attack class implementations -------------------------------------------------
 
 function classContentCorruption(): TrialOutcome {
-  const payload = buildValidPayload('90101', 'Content');
+  const { payload, record } = issueTag('90101', 'Content');
   payload.triageData.name = corruptAsciiString(payload.triageData.name);
-  return runTrial(payload);
+  return runTrial(payload, record);
 }
 
 function classPublicKeyCorruption(): TrialOutcome {
-  const payload = buildValidPayload('90102', 'Key');
+  const { payload, record } = issueTag('90102', 'Key');
   const jwk = JSON.parse(payload.tagId);
   jwk.x = corruptBase64Url(jwk.x);
   payload.tagId = JSON.stringify(jwk);
-  return runTrial(payload);
+  return runTrial(payload, record);
 }
 
 function classPatientSignatureCorruption(): TrialOutcome {
-  const payload = buildValidPayload('90103', 'PatientSig');
+  const { payload, record } = issueTag('90103', 'PatientSig');
   // Corrupt at the raw byte level, not the base64 character level: a base64
   // signature's final character encodes some unused/padding bits that don't
-  // map to any real byte, so a single character-level substitution can
-  // occasionally leave the decoded bytes unchanged (this was measured
-  // directly — see RESULTS_LOG.md's Phase 4 entry for the ~2% anomaly rate
-  // it produced before this fix).
-  const raw = Buffer.from(payload.signature, 'base64');
-  payload.signature = corruptBufferBit(raw).toString('base64');
-  return runTrial(payload);
+  // map to any real byte (see RESULTS_LOG.md's Phase 4 entry).
+  payload.signature = corruptBufferBit(Buffer.from(payload.signature, 'base64')).toString('base64');
+  return runTrial(payload, record);
 }
 
 function classAuthoritySignatureCorruption(): TrialOutcome {
-  const payload = buildValidPayload('90104', 'AuthSig');
-  const raw = Buffer.from(payload.authoritySignature!, 'base64');
-  payload.authoritySignature = corruptBufferBit(raw).toString('base64');
-  return runTrial(payload);
+  const { payload, record } = issueTag('90104', 'AuthSig');
+  payload.authoritySignature = corruptBufferBit(Buffer.from(payload.authoritySignature!, 'base64')).toString('base64');
+  return runTrial(payload, record);
 }
 
 function classTruncation(): TrialOutcome {
-  const payload = buildValidPayload('90105', 'Truncate');
-  const compressedHex = NfcService.compressTag(payload);
-  const compressedBuf = Buffer.from(compressedHex, 'hex');
+  const { payload, record } = issueTag('90105', 'Truncate');
+  const compressedBuf = Buffer.from(NfcService.compressTag(payload), 'hex');
   // Truncate at a random offset strictly before the end (guarantees data loss).
   const cutAt = 1 + Math.floor(Math.random() * (compressedBuf.length - 1));
-  const truncated = compressedBuf.subarray(0, cutAt);
-
   try {
-    const decompressed = NfcService.decompressTag(truncated.toString('hex'));
-    // If decompression somehow "succeeds" on truncated data, the result must
-    // still fail real verification — check it explicitly rather than assuming.
-    return runTrial(decompressed);
+    const decompressed = NfcService.decompressTag(compressedBuf.subarray(0, cutAt).toString('hex'));
+    // If decompression somehow "succeeds" on truncated data, it must still fail verification.
+    return runTrial(decompressed, record);
   } catch {
-    // Decompression/JSON-parse failure on a truncated tag is a correct
-    // rejection — the system refuses to process an unreadable payload.
-    return { verified: false, trustedAuthority: false, decompressionOrParseFailed: true };
+    // Refusing to process an unreadable payload is a correct rejection.
+    return { verified: false, trustedAuthority: false, freshness: 'n/a', accepted: false, decompressionOrParseFailed: true };
   }
 }
 
 function classCrossPatientGraft(): TrialOutcome {
-  const patientA = buildValidPayload('90106', 'PatientA');
-  const patientB = buildValidPayload('90107', 'PatientB');
-  const grafted: TriagePayload = {
-    ...patientA, // A's tagId + signature + authoritySignature
-    triageData: patientB.triageData, // B's content
-    fhirPatientId: patientB.fhirPatientId,
-  };
-  return runTrial(grafted);
+  // A's key + signatures, B's clinical content and ID: Tier 1 must fail.
+  const a = issueTag('90106', 'PatientA');
+  const b = issueTag('90107', 'PatientB');
+  const grafted: TriagePayload = { ...a.payload, triageData: b.payload.triageData, fhirPatientId: b.payload.fhirPatientId };
+  return runTrial(grafted, b.record);
 }
 
 function classForgedKey(): TrialOutcome {
-  // Adversary generates their own valid P-256 pair and signs fabricated
-  // content with it — a structurally valid self-signature over content they
-  // invented. They do not have AUTHORITY_PRIVATE_KEY, so they attempt a
-  // garbage authoritySignature (a naive forgery attempt) rather than a real one.
+  // Adversary signs fabricated content with their own valid P-256 key; without
+  // AUTHORITY_PRIVATE_KEY they can only attach a garbage certificate.
+  const victim = issueTag('90108', 'Victim');
   const attackerKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  const attackerPublicJwk = attackerKeys.publicKey.export({ format: 'jwk' }) as { x: string; y: string };
-  const tagId = JSON.stringify({ kty: 'EC', crv: 'P-256', x: attackerPublicJwk.x, y: attackerPublicJwk.y });
-
-  const forgedTriageData = {
-    name: 'Forged Identity',
-    bloodGroup: 'AB-Positive',
-    allergies: [],
-    emergencyContacts: [],
-    dnrStatus: false,
+  const { x, y } = attackerKeys.publicKey.export({ format: 'jwk' }) as { x: string; y: string };
+  const forged: TriagePayload = {
+    ...victim.payload,
+    tagId: JSON.stringify({ kty: 'EC', crv: 'P-256', x, y }),
+    triageData: { name: 'Forged Identity', bloodGroup: 'AB-Positive', allergies: [], emergencyContacts: [], dnrStatus: false },
+    authoritySignature: crypto.randomBytes(64).toString('base64'),
   };
-  const signature = crypto
-    .sign('sha256', Buffer.from(JSON.stringify(forgedTriageData)), { key: attackerKeys.privateKey, dsaEncoding: 'ieee-p1363' })
-    .toString('base64');
+  forged.signature = sign(attackerKeys.privateKey, contentSigningString(forged));
+  return runTrial(forged, victim.record);
+}
 
-  const garbageAuthoritySignature = crypto.randomBytes(64).toString('base64'); // naive forgery attempt, not derived from the real authority key
+function classIssuedAtEdit(): TrialOutcome {
+  // Make an old tag look like the current issuance by rewriting its timestamp
+  // to match the server record. issuedAt is signed, so Tier 1 must fail.
+  const old = issueTag('90110', 'OldTimestamp', Math.floor(Date.now() / 1000) - 180 * 86400);
+  const currentRecord: IssuanceRecord = { tagIssuedAt: new Date(Math.floor(Date.now() / 1000) * 1000), tagRevokedAt: null };
+  old.payload.timestamp = currentRecord.tagIssuedAt!.toISOString();
+  return runTrial(old.payload, currentRecord);
+}
 
-  const payload: TriagePayload = {
-    version: '2.0',
-    timestamp: new Date().toISOString(),
-    fhirPatientId: '90108',
-    triageData: forgedTriageData,
-    tagId,
-    signature,
-    authoritySignature: garbageAuthoritySignature,
-  };
-  return runTrial(payload);
+function classPatientIdRelabel(): TrialOutcome {
+  // Relabel a genuine certified tag as belonging to another patient (the
+  // consent-gate bypass vector). The ID is signed in both tiers.
+  const a = issueTag('90111', 'Relabel');
+  const victimRecord = a.record; // victim's issuance record coincides in time
+  return runTrial({ ...a.payload, fhirPatientId: '90112' }, victimRecord);
+}
+
+function classCertificateGraft(): TrialOutcome {
+  // Attacker reuses a genuine certificate issued for patient A's key on a tag
+  // claiming patient B, re-signing B-labelled content with A's private key so
+  // Tier 1 passes. The certificate names patient A, so Tier 2 must fail.
+  const a = issueTag('90113', 'CertOwner');
+  const forged: TriagePayload = { ...a.payload, fhirPatientId: '90114', triageData: { ...a.payload.triageData, name: 'Victim B' } };
+  forged.signature = sign(a.patientPrivateKey, contentSigningString(forged));
+  return runTrial(forged, a.record);
+}
+
+function classSupersededReplay(): TrialOutcome {
+  // A genuine, unmodified, certified tag that has since been replaced by a newer issuance.
+  const old = issueTag('90115', 'Superseded', Math.floor(Date.now() / 1000) - 90 * 86400);
+  const reissued: IssuanceRecord = { tagIssuedAt: new Date(), tagRevokedAt: null };
+  return runTrial(old.payload, reissued);
+}
+
+function classRevokedReplay(): TrialOutcome {
+  // A genuine, unmodified, certified tag the patient has reported lost.
+  const tag = issueTag('90116', 'Revoked', Math.floor(Date.now() / 1000) - 3600);
+  return runTrial(tag.payload, { ...tag.record, tagRevokedAt: new Date() });
 }
 
 function classControl(): TrialOutcome {
-  const payload = buildValidPayload('90109', 'Control');
-  return runTrial(payload);
+  const { payload, record } = issueTag('90109', 'Control');
+  return runTrial(payload, record);
 }
 
 // --- Run ----------------------------------------------------------------------
@@ -195,33 +217,31 @@ interface ClassResult {
   className: string;
   expectedOutcome: 'reject' | 'accept';
   n: number;
+  acceptedCount: number;
   trustedAuthorityTrueCount: number;
   verifiedTrueCount: number;
   decompressionFailedCount: number;
-  rejectionRate: number; // fraction with trustedAuthority !== true (for attack classes) / acceptance rate (for control)
-  anomalies: TrialOutcome[]; // trials where the outcome did NOT match expectedOutcome — never rounded away
+  rejectionRate: number; // reject classes: fraction not accepted; control: fraction accepted
+  anomalies: TrialOutcome[]; // trials whose outcome did NOT match expectedOutcome — never rounded away
 }
 
 function runClass(className: string, expectedOutcome: 'reject' | 'accept', trialFn: () => TrialOutcome): ClassResult {
   const outcomes: TrialOutcome[] = [];
   for (let i = 0; i < N_PER_CLASS; i++) outcomes.push(trialFn());
 
-  const trustedAuthorityTrueCount = outcomes.filter((o) => o.trustedAuthority).length;
-  const verifiedTrueCount = outcomes.filter((o) => o.verified).length;
-  const decompressionFailedCount = outcomes.filter((o) => o.decompressionOrParseFailed).length;
-
-  const anomalies = outcomes.filter((o) =>
-    expectedOutcome === 'reject' ? o.trustedAuthority === true : o.trustedAuthority !== true
-  );
-
-  const rejectionRate = expectedOutcome === 'reject'
-    ? (N_PER_CLASS - trustedAuthorityTrueCount) / N_PER_CLASS
-    : trustedAuthorityTrueCount / N_PER_CLASS;
+  const acceptedCount = outcomes.filter((o) => o.accepted).length;
+  const anomalies = outcomes.filter((o) => (expectedOutcome === 'reject' ? o.accepted : !o.accepted));
 
   return {
-    className, expectedOutcome, n: N_PER_CLASS,
-    trustedAuthorityTrueCount, verifiedTrueCount, decompressionFailedCount,
-    rejectionRate, anomalies,
+    className,
+    expectedOutcome,
+    n: N_PER_CLASS,
+    acceptedCount,
+    trustedAuthorityTrueCount: outcomes.filter((o) => o.trustedAuthority).length,
+    verifiedTrueCount: outcomes.filter((o) => o.verified).length,
+    decompressionFailedCount: outcomes.filter((o) => o.decompressionOrParseFailed).length,
+    rejectionRate: expectedOutcome === 'reject' ? (N_PER_CLASS - acceptedCount) / N_PER_CLASS : acceptedCount / N_PER_CLASS,
+    anomalies,
   };
 }
 
@@ -234,7 +254,12 @@ function main() {
     runClass('Payload truncation at random offset', 'reject', classTruncation),
     runClass("Cross-patient graft (A's key+sig on B's content)", 'reject', classCrossPatientGraft),
     runClass('Forged-key (attacker-generated keypair + garbage authority sig)', 'reject', classForgedKey),
-    runClass('Valid unmodified payload (control)', 'accept', classControl),
+    runClass('issuedAt edit (old tag re-dated to the current issuance)', 'reject', classIssuedAtEdit),
+    runClass("Patient-ID relabel (certified tag presented as another patient's)", 'reject', classPatientIdRelabel),
+    runClass("Certificate graft (A's genuine cert on B-labelled content re-signed with A's key)", 'reject', classCertificateGraft),
+    runClass('Superseded-tag replay (genuine tag, newer issuance exists)', 'reject', classSupersededReplay),
+    runClass('Revoked-tag replay (genuine tag, patient revoked it)', 'reject', classRevokedReplay),
+    runClass('Valid unmodified current payload (control)', 'accept', classControl),
   ];
 
   const totalN = classes.reduce((a, c) => a + c.n, 0);
@@ -246,15 +271,17 @@ function main() {
     meta: {
       generatedAt: new Date().toISOString(),
       nodeVersion: process.version,
+      tagFormatVersion: TAG_FORMAT_VERSION,
       nPerClass: N_PER_CLASS,
       totalN,
-      metric: "reject == trustedAuthority !== true (see file header comment for why this, not raw `verified`, is the meaningful security metric)",
-      verifiedAgainst: 'server/src/services/nfc.service.ts NfcService.verifyTagIntegrity (real production code, post P1363 fix)',
+      metric: "accepted == trustedAuthority && classifyFreshness(...) === 'current' (the condition for a certified scan; see file header)",
+      verifiedAgainst: 'server/src/services/nfc.service.ts NfcService.verifyTagIntegrity + NfcService.classifyFreshness (real production code)',
     },
     classes: classes.map((c) => ({
       className: c.className,
       expectedOutcome: c.expectedOutcome,
       n: c.n,
+      acceptedCount: c.acceptedCount,
       trustedAuthorityTrueCount: c.trustedAuthorityTrueCount,
       verifiedTrueCount: c.verifiedTrueCount,
       decompressionFailedCount: c.decompressionFailedCount,
@@ -278,13 +305,19 @@ function main() {
   console.log(`Total trials: ${totalN}\n`);
   for (const c of classes) {
     console.log(
-      `${c.className} [expected: ${c.expectedOutcome}] — trustedAuthority=true: ${c.trustedAuthorityTrueCount}/${c.n}, ` +
-      `verified=true: ${c.verifiedTrueCount}/${c.n}, decompFailed: ${c.decompressionFailedCount}/${c.n}, ` +
-      `${c.expectedOutcome === 'reject' ? 'rejectionRate' : 'acceptanceRate'}=${(c.rejectionRate * 100).toFixed(2)}%, anomalies=${c.anomalies.length}`
+      `${c.className} [expected: ${c.expectedOutcome}] — accepted: ${c.acceptedCount}/${c.n}, ` +
+      `trustedAuthority=true: ${c.trustedAuthorityTrueCount}/${c.n}, verified=true: ${c.verifiedTrueCount}/${c.n}, ` +
+      `decompFailed: ${c.decompressionFailedCount}/${c.n}, anomalies=${c.anomalies.length}`
     );
   }
   console.log(`\nControl false-reject rate: ${controlFalseRejects}/${N_PER_CLASS} (${((controlFalseRejects / N_PER_CLASS) * 100).toFixed(2)}%)`);
   console.log(`All attack classes fully rejected (0 anomalies each): ${results.summary.allAttackClassesFullyRejected}`);
+
+  // CI gate: the paper's security claim must keep holding for the code as it is now.
+  if (!results.summary.allAttackClassesFullyRejected || controlFalseRejects > 0) {
+    console.error('TAMPER SUITE FAILED: an attack was accepted or a valid tag was rejected.');
+    process.exitCode = 1;
+  }
 }
 
 main();

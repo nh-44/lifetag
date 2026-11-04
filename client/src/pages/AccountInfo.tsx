@@ -152,13 +152,8 @@ const AccountInfo = () => {
 
             <div className="medical-card rounded-t-none space-y-6">
               {/* Trust Badge */}
-              <TrustBadge
-                status={
-                  accountData.authoritySignature
-                    ? 'authority-certified'
-                    : 'server-verified'
-                }
-              />
+              {/* Data from the authenticated API, not a verified tag: never badge it "Authority Certified". */}
+              <TrustBadge status="server-verified" />
               {/* Allergies Section */}
               <section>
                 <h2 className="text-xl font-semibold text-gray-800 mb-3">Allergies</h2>

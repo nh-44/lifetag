@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { safeInternalPath } from "@/lib/safeRedirect";
 import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
@@ -20,7 +21,7 @@ const Login = () => {
   
   // Get redirect URL from query parameters (for after login)
   const queryParams = new URLSearchParams(location.search);
-  const redirectTo = queryParams.get('redirectTo');
+  const redirectTo = queryParams.get('redirectTo') ? safeInternalPath(queryParams.get('redirectTo')) : null;
   
   useEffect(() => {
     // If user is already logged in, redirect based on context
@@ -79,7 +80,7 @@ const Login = () => {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Login to LifeTag</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Login to AegisTag</CardTitle>
           <CardDescription className="text-center">
             Enter your credentials to access your account
           </CardDescription>
@@ -111,7 +112,7 @@ const Login = () => {
                 <label htmlFor="password" className="text-sm font-medium text-gray-700">
                   Password
                 </label>
-                <Link to="/forgot-password" className="text-sm font-medium text-lifetag-primary hover:underline">
+                <Link to="/forgot-password" className="text-sm font-medium text-aegistag-primary hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -127,7 +128,7 @@ const Login = () => {
             
             <Button 
               type="submit" 
-              className="w-full bg-lifetag-primary hover:bg-lifetag-dark"
+              className="w-full bg-aegistag-primary hover:bg-aegistag-dark"
               disabled={loading}
             >
               {loading ? 'Logging in...' : 'Login'}
@@ -137,7 +138,7 @@ const Login = () => {
         <CardFooter className="flex flex-col">
           <div className="mt-2 text-center text-sm">
             <span className="text-gray-600">Not a user?</span>{' '}
-            <Link to="/signup" className="font-medium text-lifetag-primary hover:underline">
+            <Link to="/signup" className="font-medium text-aegistag-primary hover:underline">
               Sign up
             </Link>
           </div>

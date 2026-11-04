@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 /**
- * LifeTag Server-Side Cryptographic utilities
+ * AegisTag Server-Side Cryptographic utilities
  * Handles classic ECDSA P-256 signature verification and simulated Kyber-768 KEM key encapsulation.
  */
 export class CryptoUtils {
@@ -85,39 +85,48 @@ export class CryptoUtils {
   }
 
   /**
-   * Generates a real ECDSA P-256 Authority Signature certifying the patient's public key.
-   * Loads the private key from the environment variable AUTHORITY_PRIVATE_KEY, falling back to development JWK.
+   * Signs `data` with the Healthcare Authority's ECDSA P-256 private key (AUTHORITY_PRIVATE_KEY).
+   * Throws rather than returning an empty signature: a failed certification must never be
+   * written to a tag or stored as if it succeeded.
    */
-  static signWithAuthorityKey(patientPublicKeyString: string): string {
+  static signWithAuthorityKey(data: string): string {
     if (!process.env.AUTHORITY_PRIVATE_KEY) {
       throw new Error(
         'AUTHORITY_PRIVATE_KEY is not set. Generate an ECDSA P-256 key pair and add it to your .env file. See .env.example for instructions.'
       );
     }
 
-    const keyData = JSON.parse(process.env.AUTHORITY_PRIVATE_KEY);
-      
-    try {
-      const privateKey = crypto.createPrivateKey({
-        key: keyData,
-        format: 'jwk',
-      });
+    const privateKey = crypto.createPrivateKey({
+      key: JSON.parse(process.env.AUTHORITY_PRIVATE_KEY),
+      format: 'jwk',
+    });
 
-      // Signed as raw IEEE P1363 (not Node's default DER) so the client's Web Crypto
-      // subtle.verify() — which only accepts P1363 — can validate this signature
-      // entirely offline. See the matching note in verifyEcdsaSignature above.
-      const signature = crypto.sign('sha256', Buffer.from(patientPublicKeyString, 'utf8'), {
-        key: privateKey,
-        dsaEncoding: 'ieee-p1363',
-      });
-      return signature.toString('base64');
-    } catch (e) {
-      console.error('Failed to sign with Authority private key:', e);
-      return '';
-    }
+    // Signed as raw IEEE P1363 (not Node's default DER) so the client's Web Crypto
+    // subtle.verify() — which only accepts P1363 — can validate this signature
+    // entirely offline. See the matching note in verifyEcdsaSignature above.
+    const signature = crypto.sign('sha256', Buffer.from(data, 'utf8'), {
+      key: privateKey,
+      dsaEncoding: 'ieee-p1363',
+    });
+    return signature.toString('base64');
   }
 
-  static simulateAuthoritySignature(patientIdentifier: string): string {
-    return this.signWithAuthorityKey(patientIdentifier);
+  /**
+   * Public half of AUTHORITY_PRIVATE_KEY, or null if it is unset/invalid. This is the value
+   * the client must embed as its offline trust anchor (see scripts/print-authority-public-key.ts).
+   */
+  static getAuthorityPublicJwk(): crypto.webcrypto.JsonWebKey | null {
+    if (!process.env.AUTHORITY_PRIVATE_KEY) return null;
+    try {
+      const privateKey = crypto.createPrivateKey({
+        key: JSON.parse(process.env.AUTHORITY_PRIVATE_KEY),
+        format: 'jwk',
+      });
+      const { kty, crv, x, y } = crypto.createPublicKey(privateKey).export({ format: 'jwk' });
+      return { kty, crv, x, y };
+    } catch (e) {
+      console.error('AUTHORITY_PRIVATE_KEY could not be parsed as a P-256 JWK:', e);
+      return null;
+    }
   }
 }

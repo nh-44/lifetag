@@ -1,8 +1,8 @@
 {
-  "name": "lifetag-bench",
+  "name": "aegistag-bench",
   "private": true,
   "version": "1.0.0",
-  "description": "Standalone benchmark suite for the AegisTag/LifeTag paper (docs/lifetag_paper_draft.tex). Independent of client/ and server/ package installs; only depends on Node built-ins plus tsx/typescript to run.",
+  "description": "Standalone benchmark suite for the AegisTag/AegisTag paper (docs/aegistag_paper_draft.tex). Independent of client/ and server/ package installs; only depends on Node built-ins plus tsx/typescript to run.",
   "type": "commonjs",
   "scripts": {
     "bench:encoding": "tsx bench/encoding-variants.ts",
@@ -10,7 +10,9 @@
     "bench:crypto-latency": "tsx bench/crypto-latency.ts",
     "bench:tamper": "tsx bench/tamper.ts",
     "bench:baseline": "tsx bench/baseline.ts",
-    "bench:all": "npm run bench:encoding && npm run bench:sensitivity && npm run bench:crypto-latency && npm run bench:tamper && npm run bench:baseline"
+    "bench:all": "npm run bench:encoding && npm run bench:sensitivity && npm run bench:crypto-latency && npm run bench:tamper && npm run bench:baseline",
+    "bench:nfc-lab": "tsx bench/process-nfc-lab.ts",
+    "bench:tables": "tsx bench/generate-tables.ts"
   },
   "devDependencies": {
     "tsx": "^4.23.13",

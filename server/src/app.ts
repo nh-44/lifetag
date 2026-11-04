@@ -10,6 +10,10 @@ import { apiLimiter } from './middlewares/rateLimit.middleware';
 
 const app: Express = express();
 
+// Real client IPs behind a reverse proxy, so rate limits apply per client, not per proxy.
+const trustProxy = env.TRUST_PROXY ?? (env.NODE_ENV === 'production' ? '1' : undefined);
+if (trustProxy !== undefined) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy));
+
 // Security & Middleware Stack
 app.use(helmet());
 app.use(
@@ -18,14 +22,16 @@ app.use(
 		credentials: true,
 	})
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// JSON-only API: no urlencoded parser, and the built-in simple query parser instead of qs,
+// which removes the qs denial-of-service surface (npm advisory) from request handling.
+app.set('query parser', 'simple');
+app.use(express.json({ limit: '50kb' }));
 app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 
 // Base Root Route
 app.get('/', (req: Request, res: Response) => {
 	res.json({
-		name: 'LifeTag Emergency Medical API',
+		name: 'AegisTag Emergency Medical API',
 		version: '1.0.0',
 		status: 'online',
 		timestamp: new Date().toISOString(),

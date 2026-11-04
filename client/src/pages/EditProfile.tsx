@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { 
   Card, 
   CardContent, 
@@ -19,9 +19,9 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserProfile, DoctorProfile, FirstResponderProfile, getUserProfileByRole, saveUserProfile, saveDoctorProfile, saveFirstResponderProfile } from '@/services/userService';
+import { UserProfile, DoctorProfile, FirstResponderProfile, getUserProfileByRole, saveUserProfile, saveDoctorProfile, saveFirstResponderProfile, revokeMyTag } from '@/services/userService';
 import { toast } from 'sonner';
-import { NfcCryptoService } from '@/services/nfcCryptoService';
+import AccessLogPanel from '@/components/profile/AccessLogPanel';
 
 const EditProfile = () => {
   const { currentUser, loading: authLoading } = useAuth();
@@ -47,11 +47,8 @@ const EditProfile = () => {
   const [surgeries, setSurgeries] = useState<string[]>(['']);
   const [qualifications, setQualifications] = useState<string[]>(['']);
 
-  // Key status state for Security tab
-  const [keyExists, setKeyExists] = useState<boolean | null>(null);
-  const [publicKeyFingerprint, setPublicKeyFingerprint] = useState<string>('');
-  const [authorityRegistered, setAuthorityRegistered] = useState(false);
-  const [keyLoading, setKeyLoading] = useState(false);
+  // Tag revocation state for Security tab
+  const [revoking, setRevoking] = useState(false);
   
   // Load profile based on user role
   useEffect(() => {
@@ -151,39 +148,19 @@ const EditProfile = () => {
     fetchProfileData();
   }, [currentUser, navigate]);
 
-  // Check local key pair status for Security tab (USER role only)
-  useEffect(() => {
-    if (!currentUser || currentUser.role !== 'USER') return;
-
-    const checkKeyStatus = async () => {
-      setKeyLoading(true);
-      try {
-        const stored = localStorage.getItem('lifetag_ecdsa_keypair');
-        if (stored) {
-          setKeyExists(true);
-          const parsed = JSON.parse(stored);
-          // Use the x-coordinate of the public key as a fingerprint
-          const xCoord: string = parsed.publicKey?.x || '';
-          setPublicKeyFingerprint(xCoord.substring(0, 16));
-        } else {
-          setKeyExists(false);
-          setPublicKeyFingerprint('');
-        }
-      } catch {
-        setKeyExists(false);
-      }
-
-      // Check authority registration from profile data
-      if (userProfile?.authoritySignature) {
-        setAuthorityRegistered(true);
-      } else {
-        setAuthorityRegistered(false);
-      }
-      setKeyLoading(false);
-    };
-
-    checkKeyStatus();
-  }, [currentUser, userProfile]);
+  const handleRevokeTag = async () => {
+    if (!window.confirm('Revoke your NFC tag? Every tag issued so far will stop counting as verified until a clinician issues you a new one.')) return;
+    setRevoking(true);
+    try {
+      const { revokedAt } = await revokeMyTag();
+      setUserProfile((p) => (p ? { ...p, tagRevokedAt: revokedAt } : p));
+      toast.success('Tag revoked. Ask your clinician to issue a replacement.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to revoke tag');
+    } finally {
+      setRevoking(false);
+    }
+  };
   
   // Handle adding/removing dynamic field items
   const handleAddField = (
@@ -331,7 +308,7 @@ const EditProfile = () => {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lifetag-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aegistag-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading profile...</p>
         </div>
       </div>
@@ -339,8 +316,7 @@ const EditProfile = () => {
   }
   
   if (!currentUser) {
-    navigate('/login');
-    return null;
+    return <Navigate to="/login" replace />;
   }
   
   // Render appropriate form based on user role
@@ -578,7 +554,7 @@ const EditProfile = () => {
                 <Button 
                   onClick={handleSaveUserEmergencyInfo}
                   disabled={saving}
-                  className="bg-lifetag-primary hover:bg-lifetag-dark"
+                  className="bg-aegistag-primary hover:bg-aegistag-dark"
                 >
                   {saving ? 'Saving...' : 'Save & Continue'}
                 </Button>
@@ -858,7 +834,7 @@ const EditProfile = () => {
                 <Button 
                   onClick={handleSaveDoctorOnlyInfo}
                   disabled={saving}
-                  className="bg-lifetag-primary hover:bg-lifetag-dark"
+                  className="bg-aegistag-primary hover:bg-aegistag-dark"
                 >
                   {saving ? 'Saving...' : 'Save Medical Information'}
                 </Button>
@@ -876,103 +852,63 @@ const EditProfile = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Key Pair Status */}
+                {/* Current tag status */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Local Key Pair</h3>
-                  <div className={`flex items-start gap-3 p-4 rounded-lg border-l-4 ${
-                    keyLoading
-                      ? 'border-gray-300 bg-gray-50'
-                      : keyExists
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-amber-500 bg-amber-50'
-                  }`}>
-                    {keyLoading ? (
-                      <p className="text-sm text-gray-500">Checking key status…</p>
-                    ) : keyExists ? (
-                      <div>
-                        <p className="text-sm font-semibold text-green-800">
-                          🔑 ECDSA P-256 Key Pair Found
-                        </p>
-                        <p className="text-xs text-green-700 mt-1 font-mono">
-                          Fingerprint: {publicKeyFingerprint}…
-                        </p>
+                  <h3 className="text-lg font-medium">Your NFC Tag</h3>
+                  {(() => {
+                    const issuedAt = userProfile?.tagIssuedAt ? new Date(userProfile.tagIssuedAt) : null;
+                    const revokedAt = userProfile?.tagRevokedAt ? new Date(userProfile.tagRevokedAt) : null;
+                    const revoked = !!(issuedAt && revokedAt && revokedAt >= issuedAt);
+                    // Literal class names so Tailwind's scanner keeps them in the build
+                    const toneClass = !issuedAt
+                      ? 'border-amber-500 bg-amber-50'
+                      : revoked ? 'border-red-500 bg-red-50' : 'border-green-500 bg-green-50';
+                    return (
+                      <div className={`p-4 rounded-lg border-l-4 ${toneClass}`}>
+                        {!issuedAt ? (
+                          <>
+                            <p className="text-sm font-semibold text-amber-800">⏳ No certified tag issued yet</p>
+                            <p className="text-xs text-amber-700 mt-1">
+                              A clinician issues your tag; the Healthcare Authority certifies it at that moment.
+                            </p>
+                          </>
+                        ) : revoked ? (
+                          <>
+                            <p className="text-sm font-semibold text-red-800">⛔ Tag revoked</p>
+                            <p className="text-xs text-red-700 mt-1">
+                              Revoked on {revokedAt!.toLocaleString()}. Ask a clinician to issue a replacement.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-green-800">🏥 Authority-certified tag active</p>
+                            <p className="text-xs text-green-700 mt-1">
+                              Issued {issuedAt.toLocaleString()}{userProfile?.tagIssuedBy ? ` by ${userProfile.tagIssuedBy}` : ''}.
+                              Any older tag you may still have is superseded.
+                            </p>
+                            <Button variant="outline" size="sm" className="mt-3 text-red-600 border-red-200"
+                              onClick={handleRevokeTag} disabled={revoking}>
+                              {revoking ? 'Revoking…' : 'Report tag lost or stolen'}
+                            </Button>
+                          </>
+                        )}
                       </div>
-                    ) : (
-                      <div>
-                        <p className="text-sm font-semibold text-amber-800">
-                          ⚠️ No Key Pair Found
-                        </p>
-                        <p className="text-xs text-amber-700 mt-1">
-                          A key pair will be generated when you write your first NFC tag.
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-3"
-                          onClick={async () => {
-                            setKeyLoading(true);
-                            try {
-                              await NfcCryptoService.getOrCreateKeyPair();
-                              const stored = localStorage.getItem('lifetag_ecdsa_keypair');
-                              if (stored) {
-                                setKeyExists(true);
-                                const parsed = JSON.parse(stored);
-                                setPublicKeyFingerprint((parsed.publicKey?.x || '').substring(0, 16));
-                              }
-                              toast.success('Key pair generated successfully');
-                            } catch {
-                              toast.error('Failed to generate key pair');
-                            } finally {
-                              setKeyLoading(false);
-                            }
-                          }}
-                        >
-                          Generate Key Pair Now
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 <Separator />
 
-                {/* Authority Registration Status */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Healthcare Authority Registration</h3>
-                  <div className={`flex items-start gap-3 p-4 rounded-lg border-l-4 ${
-                    authorityRegistered
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-amber-500 bg-amber-50'
-                  }`}>
-                    {authorityRegistered ? (
-                      <div>
-                        <p className="text-sm font-semibold text-green-800">
-                          🏥 Registered with Healthcare Authority
-                        </p>
-                        <p className="text-xs text-green-700 mt-1">
-                          Your public key has been certified. NFC tags signed with your key will show as "Authority Certified" to responders.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-sm font-semibold text-amber-800">
-                          ⏳ Pending Registration
-                        </p>
-                        <p className="text-xs text-amber-700 mt-1">
-                          Your key has not yet been certified by a Healthcare Authority. Tags will show as "Self-Signed" until registered.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <AccessLogPanel />
 
                 <Separator />
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
-                    <strong>What does this mean?</strong> Your key pair is used to digitally sign the medical data on your NFC tag.
-                    When a first responder scans your tag, the signature is verified to ensure the data hasn't been tampered with.
-                    Authority registration adds a second layer of trust, confirming your identity through a Healthcare Authority.
+                    <strong>What does this mean?</strong> Your tag carries your emergency triage data, signed so responders can
+                    detect tampering offline. The signing key is created fresh for each tag and certified by the Healthcare
+                    Authority for you and that issuance only. Only your most recent tag counts as verified online; revoking it
+                    invalidates every tag issued so far.
                   </p>
                 </div>
               </CardContent>
@@ -1079,7 +1015,7 @@ const EditProfile = () => {
             <Button 
               onClick={handleSaveDoctorProfile}
               disabled={saving}
-              className="bg-lifetag-primary hover:bg-lifetag-dark"
+              className="bg-aegistag-primary hover:bg-aegistag-dark"
             >
               {saving ? 'Saving...' : 'Save Profile'}
             </Button>
@@ -1188,7 +1124,7 @@ const EditProfile = () => {
             <Button 
               onClick={handleSaveFirstResponderProfile}
               disabled={saving}
-              className="bg-lifetag-primary hover:bg-lifetag-dark"
+              className="bg-aegistag-primary hover:bg-aegistag-dark"
             >
               {saving ? 'Saving...' : 'Save Profile'}
             </Button>

@@ -47,6 +47,10 @@ model DoctorProfile {
   qualifications       String[]
   hospitalClinic       String
   specialty            String
+  // Clinical actions (tag issuance, scans, record access) require verification by the
+  // Healthcare Authority operator (scripts/verify-clinician.ts); self-signup alone is not enough.
+  verified             Boolean  @default(false)
+  verifiedAt           DateTime?
   createdAt            DateTime @default(now())
 
   @@index([userId])
@@ -63,6 +67,8 @@ model FirstResponderProfile {
   agencyId         String
   organizationType OrgType  @default(GOVERNMENT)
   qualification    String
+  verified         Boolean  @default(false)
+  verifiedAt       DateTime?
   createdAt        DateTime @default(now())
 
   @@index([userId])
@@ -80,7 +86,10 @@ model TriageProfile {
   organDonor        Boolean  @default(false)
   insuranceId       String?
   primaryPhysician  String?  // Doctor userId reference
-  authoritySignature String? // Authority signature
+  authoritySignature String? // Authority certificate for the currently issued tag
+  tagIssuedAt       DateTime? // issuedAt of the only tag that is currently valid; older tags are superseded
+  tagIssuedBy       String?   // Doctor userId that certified the current tag
+  tagRevokedAt      DateTime? // Set when the patient revokes a lost/stolen tag
   updatedAt         DateTime @updatedAt
 }
 
@@ -103,11 +112,15 @@ model ScanAuditLog {
   patientAccount String   // Account ID scanned
   timestamp      DateTime @default(now())
   deviceMeta     String?
+  certified      Boolean  @default(false) // Authority-certified AND current tag; the only input the consent gate trusts
+  accessType     String   @default("tag-scan") // tag-scan | online-lookup
+  tagFreshness   String?  // current | superseded | revoked | unregistered
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
-  token     String   @unique
+  token     String   @unique // SHA-256 of the token, never the token itself
+  rotatedAt DateTime? // set when exchanged; reuse after a short grace window revokes all sessions
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())

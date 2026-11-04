@@ -95,7 +95,7 @@ export function isFirstResponderAccount(user: User): user is FirstResponderAccou
 // --- Zero-Trust NFC & FHIR Emergency Record Extensions ---
 
 export interface NfcTagPayload {
-  version: '1.0' | '2.0';
+  version: '1.0' | '2.0' | '3.0' | string;
   tagId?: string;
   timestamp: string;
   fhirPatientId: string;
@@ -109,6 +109,7 @@ export interface NfcTagPayload {
   signature?: string; // Digital ECDSA signature for on-tag payload integrity
   authoritySignature?: string; // Healthcare Authority signature certifying patient key
   encryptedMedicalPayload?: string; // AES-GCM encrypted block for verified doctors
+  isUnsigned?: boolean; // Developer/compact tags with no signature; never treated as verified
 }
 
 export interface NfcScanHistoryEntry {

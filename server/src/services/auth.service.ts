@@ -2,8 +2,8 @@ import { prisma } from '../config/database';
 import { userRepository } from '../repositories/userRepository';
 import { doctorRepository } from '../repositories/doctorRepository';
 import { firstResponderRepository } from '../repositories/firstResponderRepository';
-import { hashPassword, verifyPassword } from '../utils/password.utils';
-import { generateToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.utils';
+import { hashPassword, verifyPassword, verifyAgainstDummy } from '../utils/password.utils';
+import { generateToken, generateRefreshToken, verifyRefreshToken, hashRefreshToken } from '../utils/jwt.utils';
 import { LoginRequestBody, SignupRequestBody } from '../types/auth.types';
 import { Role } from '../constants/roles';
 
@@ -18,6 +18,20 @@ const stripPassword = <T extends { password: string }>(record: T): Omit<T, 'pass
   const { password: _pwd, ...rest } = record;
   return rest;
 };
+
+/** How long an exchanged refresh token may still be presented (concurrent tabs) before it counts as reuse. */
+const ROTATION_GRACE_MS = 30_000;
+
+/** Creates and stores (hashed) a 7-day refresh token. */
+async function issueRefreshToken(userId: string, role: Role): Promise<string> {
+  const refreshToken = generateRefreshToken({ userId, role });
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+  await prisma.refreshToken.create({
+    data: { token: hashRefreshToken(refreshToken), userId, expiresAt },
+  });
+  return refreshToken;
+}
 
 export const authService = {
   login: async (body: LoginRequestBody) => {
@@ -41,6 +55,9 @@ export const authService = {
     }
 
     if (!userRecord) {
+      // Spend the same bcrypt time as a real check, so response timing does not reveal
+      // which IDs exist (the error message is already identical).
+      await verifyAgainstDummy(password);
       throw { statusCode: 401, message: 'Invalid User ID or password' };
     }
 
@@ -50,18 +67,7 @@ export const authService = {
     }
 
     const token = generateToken({ userId, role });
-    const refreshToken = generateRefreshToken({ userId, role });
-    
-    // Save refresh token to DB
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    await prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId,
-        expiresAt,
-      },
-    });
+    const refreshToken = await issueRefreshToken(userId, role);
 
     const userWithoutPassword = stripPassword(userRecord);
 
@@ -130,18 +136,7 @@ export const authService = {
     }
 
     const token = generateToken({ userId, role: role as Role });
-    const refreshToken = generateRefreshToken({ userId, role: role as Role });
-
-    // Save refresh token to DB
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    await prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId,
-        expiresAt,
-      },
-    });
+    const refreshToken = await issueRefreshToken(userId, role as Role);
 
     const userWithoutPassword = stripPassword(newUser);
 
@@ -170,6 +165,12 @@ export const authService = {
     return { available: !exists };
   },
 
+  /**
+   * Rotates the refresh token: the presented one is consumed and a new one issued.
+   * A token that verifies cryptographically but is no longer stored was already
+   * rotated or logged out, i.e. it is being replayed (likely stolen), so every
+   * session of that user is revoked.
+   */
   refresh: async (refreshToken: string) => {
     if (!refreshToken) throw { statusCode: 400, message: 'Refresh token is required' };
 
@@ -181,10 +182,11 @@ export const authService = {
     }
 
     const storedToken = await prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
+      where: { token: hashRefreshToken(refreshToken) },
     });
 
     if (!storedToken) {
+      await prisma.refreshToken.deleteMany({ where: { userId: payload.userId } });
       throw { statusCode: 401, message: 'Refresh token has been revoked' };
     }
 
@@ -193,16 +195,38 @@ export const authService = {
       throw { statusCode: 401, message: 'Refresh token has expired' };
     }
 
+    const now = Date.now();
+    if (storedToken.rotatedAt) {
+      // Already exchanged. Within the grace window this is a concurrent refresh (two tabs
+      // racing); after it, the token is being replayed, so end every session of the user.
+      if (now - storedToken.rotatedAt.getTime() > ROTATION_GRACE_MS) {
+        await prisma.refreshToken.deleteMany({ where: { userId: payload.userId } });
+        throw { statusCode: 401, message: 'Refresh token has been revoked' };
+      }
+    } else {
+      await prisma.refreshToken.update({ where: { id: storedToken.id }, data: { rotatedAt: new Date(now) } });
+    }
+    // Housekeeping: rotated tokens past the grace window are no longer needed.
+    await prisma.refreshToken.deleteMany({
+      where: { userId: payload.userId, rotatedAt: { lt: new Date(now - ROTATION_GRACE_MS) } },
+    });
+
     const token = generateToken({ userId: payload.userId, role: payload.role });
-    return { token };
+    const newRefreshToken = await issueRefreshToken(payload.userId, payload.role);
+    return { token, refreshToken: newRefreshToken };
   },
 
   logout: async (refreshToken: string) => {
     if (refreshToken) {
       await prisma.refreshToken.deleteMany({
-        where: { token: refreshToken },
+        where: { token: hashRefreshToken(refreshToken) },
       });
     }
     return { success: true };
+  },
+
+  /** Ends every session of a user (account deletion, credential change). */
+  revokeAllSessions: async (userId: string) => {
+    await prisma.refreshToken.deleteMany({ where: { userId } });
   }
 };

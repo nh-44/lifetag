@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { passwordProblem } from "@/lib/safeRedirect";
 import { useAuth } from '@/contexts/AuthContext';
 
 type AccountType = 'USER' | 'DOCTOR' | 'FIRST_RESPONDER';
@@ -84,6 +85,9 @@ const Signup = () => {
       if (password !== confirmPassword) {
         throw new Error('Passwords do not match');
       }
+
+      const weak = passwordProblem(password);
+      if (weak) throw new Error(weak);
       
       if (isIdAvailable === false) {
         throw new Error('This User ID is already taken. Please choose another.');
@@ -147,7 +151,7 @@ const Signup = () => {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Create a LifeTag Account</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Create a AegisTag Account</CardTitle>
           <CardDescription className="text-center">
             Get started with your medical information system
           </CardDescription>
@@ -233,7 +237,11 @@ const Signup = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                aria-describedby="password-rule"
               />
+              <p id="password-rule" className={`text-xs ${password && passwordProblem(password) ? 'text-amber-700' : 'text-gray-500'}`}>
+                {password ? passwordProblem(password) ?? 'Password meets the requirements' : 'At least 8 characters, with a letter and a number'}
+              </p>
             </div>
             
             <div className="space-y-2">
@@ -250,9 +258,16 @@ const Signup = () => {
               />
             </div>
             
+            {accountType !== 'USER' && (
+              <p className="text-xs rounded-md bg-amber-50 border border-amber-200 text-amber-800 p-2" role="note">
+                Clinician accounts start unverified. You can sign in straight away, but issuing tags, logging scans
+                and viewing patient records unlock only after the Healthcare Authority verifies your credentials.
+              </p>
+            )}
+
             <Button 
               type="submit" 
-              className="w-full bg-lifetag-primary hover:bg-lifetag-dark"
+              className="w-full bg-aegistag-primary hover:bg-aegistag-dark"
               disabled={loading || isIdAvailable === false}
             >
               {loading ? 'Creating Account...' : 'Sign Up'}
@@ -262,7 +277,7 @@ const Signup = () => {
         <CardFooter className="flex flex-col">
           <div className="mt-2 text-center text-sm">
             <span className="text-gray-600">Already have an account?</span>{' '}
-            <Link to="/login" className="font-medium text-lifetag-primary hover:underline">
+            <Link to="/login" className="font-medium text-aegistag-primary hover:underline">
               Login
             </Link>
           </div>

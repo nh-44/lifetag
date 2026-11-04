@@ -1,35 +1,26 @@
-// Simple obfuscation to prevent tokens from being casually readable in Application -> Local Storage
-// This is NOT encryption, just obfuscation to satisfy visual inspection requirements.
+// The short-lived (15 min) access token lives only in memory, never in Web Storage,
+// so a script injected into the page cannot read it back from localStorage later.
+// The 7-day refresh token is never visible to JavaScript at all: the server keeps it
+// in an HttpOnly, SameSite=Strict cookie, and a page reload restores the session by
+// calling /auth/refresh (see refreshAccessToken in services/api.ts).
 
-const obfuscate = (data: string): string => {
-  return btoa(data.split('').reverse().join(''));
-};
+let accessToken: string | null = null;
 
-const deobfuscate = (obfuscated: string): string => {
-  try {
-    return atob(obfuscated).split('').reverse().join('');
-  } catch (e) {
-    return '';
-  }
-};
+// Keys written by the previous localStorage-based scheme (reversible Base64
+// obfuscation). Removed on load so upgraded browsers don't keep stale tokens around.
+const LEGACY_KEYS = ['aegistag_token', 'aegistag_refresh_token'];
+try {
+  LEGACY_KEYS.forEach((k) => localStorage.removeItem(k));
+} catch {
+  // localStorage unavailable (private mode / SSR): nothing to clean up
+}
 
 export const tokenStorage = {
   setToken: (token: string) => {
-    localStorage.setItem('lifetag_token', obfuscate(token));
+    accessToken = token;
   },
-  getToken: (): string | null => {
-    const token = localStorage.getItem('lifetag_token');
-    return token ? deobfuscate(token) : null;
-  },
-  setRefreshToken: (token: string) => {
-    localStorage.setItem('lifetag_refresh_token', obfuscate(token));
-  },
-  getRefreshToken: (): string | null => {
-    const token = localStorage.getItem('lifetag_refresh_token');
-    return token ? deobfuscate(token) : null;
-  },
+  getToken: (): string | null => accessToken,
   clearTokens: () => {
-    localStorage.removeItem('lifetag_token');
-    localStorage.removeItem('lifetag_refresh_token');
-  }
+    accessToken = null;
+  },
 };

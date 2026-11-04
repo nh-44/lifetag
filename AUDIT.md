@@ -1,10 +1,10 @@
-# AegisTag / LifeTag — Phase 0 Audit
+# AegisTag / AegisTag — Phase 0 Audit
 
 Audited against commit `bcbb1fb` on `main`, 2026-08-31. All line numbers refer to files in this repo tree as of that commit. This document reports what the code does; Section "Discrepancies" flags places where the paper's description diverges from it. Nothing here has been fixed yet.
 
 ## 1. LaTeX source location and structure
 
-The paper source is [docs/lifetag_paper_draft.tex](docs/lifetag_paper_draft.tex) (IEEEtran conference class, single `.tex` file, no separate bibliography or figure files). Current section numbering:
+The paper source is [docs/aegistag_paper_draft.tex](docs/aegistag_paper_draft.tex) (IEEEtran conference class, single `.tex` file, no separate bibliography or figure files). Current section numbering:
 
 1. Introduction (Emergency Medical Information Access Problem, Problem With Current Solutions, Why NFC?, Our Solution: AegisTag, Contributions)
 2. Related Work (NFC-Based Healthcare Systems, Emergency Medical Information Systems, Security and Privacy in NFC Systems, Consent and Access Governance in EHR Systems, Research Gap and Comparison)
@@ -132,8 +132,8 @@ Real, and confined to files that are explicit about it being a non-cryptographic
 - [server/src/utils/crypto.utils.ts:40-80](server/src/utils/crypto.utils.ts#L40-L80) — `CryptoUtils.generateKyberKeyPair()`, `encapsulateSharedSecret()`, `decapsulateSharedSecret()`. Implementation: `generateKyberKeyPair` returns two strings built from `crypto.randomBytes(32).toString('hex')` slices with `KYBER-768-PUB-`/`KYBER-768-PRI-` string prefixes — not actual lattice key material. `encapsulateSharedSecret` returns a random 32-byte hex "shared secret" and an unrelated random "ciphertext" string (the ciphertext does not actually encapsulate the secret). `decapsulateSharedSecret` computes `SHA256(ciphertext + privateKey)` — this is **not** a real KEM decapsulation and, notably, will not reproduce the same value `encapsulateSharedSecret` generated (the two sides don't actually derive a matching shared secret at all; they're independent random/hash outputs). This is consistent with the paper's own characterization of it as a placeholder that "does not perform real lattice-based cryptography."
 - [server/src/utils/benchmark.ts:182,236-247,314-323](server/src/utils/benchmark.ts) — calls the above to collect encapsulation/decapsulation latency percentiles as part of the benchmark script.
 - [server/src/tests/unit/crypto.utils.spec.ts](server/src/tests/unit/crypto.utils.spec.ts) — unit tests for the above.
-- [docs/lifetag_paper_draft.tex](docs/lifetag_paper_draft.tex) — described in "Preliminary Post-Quantum Benchmarking Construct" (§V-D) and listed in Limitations/Future Work.
-- [lifetag_test_plan.md](lifetag_test_plan.md), [LifeTag_Team_Work_Division.md](LifeTag_Team_Work_Division.md) — planning-doc mentions only.
+- [docs/aegistag_paper_draft.tex](docs/aegistag_paper_draft.tex) — described in "Preliminary Post-Quantum Benchmarking Construct" (§V-D) and listed in Limitations/Future Work.
+- [aegistag_test_plan.md](aegistag_test_plan.md), [AegisTag_Team_Work_Division.md](AegisTag_Team_Work_Division.md) — planning-doc mentions only.
 
 It is never referenced from any tag-write, tag-verify, login, or session code path — confirmed by grep, its only callers are the benchmark script and its own unit test.
 

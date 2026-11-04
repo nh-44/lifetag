@@ -1,4 +1,4 @@
-# LifeTag: Decentralized Emergency Medical Profile & NFC Health System
+# AegisTag: Decentralized Emergency Medical Profile & NFC Health System
 
 [![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=flat&logo=react&logoColor=black)](https://reactjs.org/)
@@ -6,7 +6,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Web NFC](https://img.shields.io/badge/Web_NFC-NDEF-008080?style=flat&logo=nfc&logoColor=white)](https://w3c.github.io/web-nfc/)
 
-LifeTag is a consolidated emergency medical profile application and Web NFC hardware toolkit. It provides instant, offline-resilient access to critical triage medical data (blood group, severe allergies, emergency contacts, DNR status) for first responders while maintaining role-based authentication and secure data views for doctors and patients.
+AegisTag is a consolidated emergency medical profile application and Web NFC hardware toolkit. It provides instant, offline-resilient access to critical triage medical data (blood group, severe allergies, emergency contacts, DNR status) for first responders while maintaining role-based authentication and secure data views for doctors and patients.
 
 ---
 
@@ -34,7 +34,7 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
                                              │ 13.56 MHz NDEF Scan
                                              ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  LifeTag Application                                  │
+│                                  AegisTag Application                                  │
 │                                                                                        │
 │   ┌────────────────────────┐  ┌────────────────────────┐  ┌─────────────────────────┐   │
 │   │   NFC Hardware Tools   │  │   Emergency Triage     │  │   Doctor Medical Portal │   │
@@ -42,7 +42,7 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 │   └──────────┬─────────────┘  └───────────┬────────────┘  └───────────┬─────────────┘   │
 │              │                            │                           │                 │
 │   ┌──────────▼────────────────────────────▼───────────────────────────▼────────────┐   │
-│   │                   LifeTag Node.js / Express REST API (v1)                      │   │
+│   │                   AegisTag Node.js / Express REST API (v1)                      │   │
 │   │                   (Controllers ➔ Services ➔ Repositories)                      │   │
 │   └───────────────────────────────────────┬────────────────────────────────────────┘   │
 │                                           │                                            │
@@ -74,8 +74,8 @@ LifeTag is a consolidated emergency medical profile application and Web NFC hard
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/nh-44/lifetag.git
-   cd lifetag
+   git clone https://github.com/nh-44/aegistag.git
+   cd aegistag
    ```
 
 2. Setup the Backend:
@@ -120,7 +120,7 @@ The consolidated project is scheduled for next-generation architectural enhancem
 - Replace password logins for medical practitioners with biometric WebAuthn / FIDO2 authentication tied to verified doctor credentials.
 
 ### 3. PWA Service Worker & Offline Sync
-- Package LifeTag as an installable Progressive Web App (PWA) using local offline scan history synchronization.
+- Package AegisTag as an installable Progressive Web App (PWA) using local offline scan history synchronization.
 
 ---
 
@@ -128,7 +128,7 @@ The consolidated project is scheduled for next-generation architectural enhancem
 
 This codebase serves as the reference implementation for an upcoming research paper aimed at top-tier digital health and security venues (*IEEE EMBC*, *ACM CHIL*, *IEEE JBHI*):
 
-> **Title**: *"LifeTag: A Decentralized, Offline-Resilient Emergency Health Data Protocol using Standardized Web NFC and Zero-Trust Asymmetric Cryptography"*
+> **Title**: *"AegisTag: A Decentralized, Offline-Resilient Emergency Health Data Protocol using Standardized Web NFC and Zero-Trust Asymmetric Cryptography"*
 
 ### Research Contributions:
 - **Off-Grid Emergency Data Protocol**: Packing tamper-proof FHIR-compliant triage summaries into constrained NDEF capacity (< 504 bytes).

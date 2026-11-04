@@ -83,7 +83,7 @@ describe('validate middleware', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('BEHAVIOR DOC: extra/unexpected fields are STRIPPED by Zod .parse() (not rejected)', () => {
+  it('REGRESSION: extra/unexpected fields are stripped from req.body before the controller (mass assignment)', () => {
     /**
      * Zod's default parse() behavior strips unknown keys rather than rejecting them.
      * This means extra fields sent by a client are silently dropped before reaching
@@ -97,12 +97,9 @@ describe('validate middleware', () => {
 
     validate(TestSchema)(req, res as Response, next as NextFunction);
 
-    // Validation passes — extra field is stripped
     expect(next).toHaveBeenCalledOnce();
-    // Note: Zod's parse result isn't assigned back to req.body in the current
-    // implementation (schema.parse(req.body) — result is discarded).
-    // This means the extra field still reaches the controller via req.body.
-    // Documented as a known behavior; the schema prevents type coercion issues.
+    expect(req.body).not.toHaveProperty('extraField');
+    expect(req.body).toMatchObject({ name: 'Dave', age: 40 });
   });
 
   it('returns 400 when body is null', () => {

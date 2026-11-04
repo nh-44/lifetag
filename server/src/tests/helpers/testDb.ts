@@ -99,6 +99,7 @@ export async function seedDoctor(overrides?: {
   userId?: string;
   name?: string;
   password?: string;
+  verified?: boolean;
 }) {
   const userId = overrides?.userId ?? `DR${Math.floor(10000 + Math.random() * 90000)}`;
   const name = overrides?.name ?? 'Dr. Test';
@@ -115,6 +116,7 @@ export async function seedDoctor(overrides?: {
       qualifications: ['MBBS'],
       hospitalClinic: 'Test Hospital',
       specialty: 'General',
+      verified: overrides?.verified ?? true,
     },
   });
 
@@ -126,6 +128,7 @@ export async function seedFirstResponder(overrides?: {
   userId?: string;
   name?: string;
   password?: string;
+  verified?: boolean;
 }) {
   const userId = overrides?.userId ?? `FR${Math.floor(10000 + Math.random() * 90000)}`;
   const name = overrides?.name ?? 'FR Test';
@@ -143,6 +146,7 @@ export async function seedFirstResponder(overrides?: {
       agencyId: 'EMS-001',
       organizationType: 'GOVERNMENT',
       qualification: 'EMT-Basic',
+      verified: overrides?.verified ?? true,
     },
   });
 
@@ -154,13 +158,16 @@ export async function seedScanAuditLog(data: {
   patientAccount: string;
   timestamp?: Date;
   deviceMeta?: string;
+  certified?: boolean;
 }) {
   return testPrisma.scanAuditLog.create({
     data: {
       scannedBy: data.scannedBy,
       patientAccount: data.patientAccount,
       timestamp: data.timestamp ?? new Date(),
-      deviceMeta: data.deviceMeta ?? 'test-device [Authority-Certified]',
+      deviceMeta: data.deviceMeta ?? 'test-device',
+      certified: data.certified ?? true,
+      tagFreshness: (data.certified ?? true) ? 'current' : 'unregistered',
     },
   });
 }

@@ -1,4 +1,4 @@
-# LifeTag — Team Work Division & Build Guide
+# AegisTag — Team Work Division & Build Guide
 
 **Team:** Naveen, Nandita, Preksha, Navyashree  
 **Timeline:** Week 1 (Working v1) → Week 2 (Hardening + Paper Draft)
@@ -8,7 +8,7 @@
 ## 📁 Monorepo Layout (Restructured)
 All paths in this guide refer to the reorganized project layout:
 ```
-lifetag/
+aegistag/
 ├── client/          # React + Vite frontend (Vite port 8080)
 ├── server/          # Express + Prisma + PostgreSQL backend (API port 9000)
 └── docs/            # Project architecture & documentation guides

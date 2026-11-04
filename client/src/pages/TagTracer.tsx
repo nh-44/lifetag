@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import AdminPanel from "@/components/nfc/AdminPanel";
 import ScanHistory from "@/components/nfc/ScanHistory";
 import { History, ShieldCheck } from "lucide-react";
 import { NfcTagPayload } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { logScan } from "@/services/userService";
 
 interface ScanRecord {
   accountId: string;
@@ -21,6 +23,30 @@ const TagTracer = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const { currentUser } = useAuth();
+
+  /**
+   * Reports a scan to the server audit log when a clinician is logged in and online.
+   * The server re-verifies the tag; only a current, authority-certified tag for this
+   * patient yields a "certified" scan, which is what opens the 24 h consent window
+   * for a doctor. Offline, the scan still renders locally and simply isn't logged.
+   */
+  const reportScan = async (accountId: string, payload: NfcTagPayload) => {
+    if (!currentUser || (currentUser.role !== "DOCTOR" && currentUser.role !== "FIRST_RESPONDER")) return;
+    if (payload.isUnsigned || !payload.signature) return;
+    try {
+      const result = await logScan(accountId, payload, navigator.userAgent);
+      if (result?.alert) {
+        toast.error(result.alert, { duration: 15000 });
+      } else if (result?.certified) {
+        toast.success("Scan logged as authority-certified");
+      } else {
+        toast.warning(`Scan logged but not certified (tag is ${result?.freshness ?? "unverified"})`);
+      }
+    } catch (e) {
+      toast.info(`Scan not logged: ${e instanceof Error ? e.message : "server unreachable"}`);
+    }
+  };
 
   const handleScan = (accountId: string, payload: NfcTagPayload) => {
     setLastScannedId(accountId);
@@ -31,6 +57,7 @@ const TagTracer = () => {
     
     toast.success("NFC tag scanned successfully!");
     saveScanToHistory(accountId);
+    void reportScan(accountId, payload);
   };
 
   const saveScanToHistory = (accountId: string) => {
@@ -73,12 +100,12 @@ const TagTracer = () => {
     toast.success(`Successfully wrote ID ${accountId} to NFC tag`);
   };
 
-  const handleAdminAuth = (isAuthenticated: boolean) => {
+  const handleAdminAuth = useCallback((isAuthenticated: boolean) => {
     setIsAdminAuthenticated(isAuthenticated);
     if (!isAuthenticated) {
       setShowHistory(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -97,7 +124,7 @@ const TagTracer = () => {
         <h1 className="text-4xl font-bold text-blue-700">Tag Tracer & NFC Tools</h1>
       </div>
       <p className="text-gray-600 mb-8 text-center max-w-lg">
-        Scan NDEF emergency health tags to view instant first-responder triage profiles or write encrypted tags.
+        Scan an emergency tag to see the patient's signed triage profile, verified on this phone, even offline.
       </p>
       
       <Card className="w-full max-w-md p-6 shadow-lg border-blue-100 mb-4 bg-white">
@@ -147,7 +174,7 @@ const TagTracer = () => {
       <ScanHistory visible={showHistory && isAdminAuthenticated} />
       
       <footer className="mt-auto pt-6 pb-4 text-center text-gray-500 text-sm">
-        <p>Offline-First Enabled • Encrypted NDEF & Zero-Trust Protocol</p>
+        <p>Works offline • Tags are digitally signed (tamper-evident), not encrypted</p>
       </footer>
     </div>
   );

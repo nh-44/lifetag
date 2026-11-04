@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const LogScanRequestSchema = z.object({
-  patientAccount: z.string().min(1, 'Patient account is required'),
-  deviceMeta: z.string().optional(),
+  patientAccount: z.string().regex(/^\d{5}$/, 'Patient account must be exactly 5 digits'),
+  deviceMeta: z.string().max(300).optional(),
   tagPayload: z.object({
     version: z.string(),
     tagId: z.string(),

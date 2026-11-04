@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\caption{Payload Encoding Comparison, Medium Profile (measured)}
+\begin{center}
+\small
+\resizebox{\ifdim\width>\columnwidth\columnwidth\else\width\fi}{!}{\begin{tabular}{lrrcr}
+\toprule
+\textbf{Variant} & \textbf{Content} & \textbf{On tag} & \textbf{Fits} & \textbf{Margin} \\
+ & (B) & (B) & 504\,B & (B) \\
+\midrule
+V1 JSON/b64/gzip (legacy) & 557 & 572 & No & -68 \\
+V2 JSON/b64/DEFLATE & 533 & 548 & No & -44 \\
+V3 binary (deployed) & 263 & 274 & Yes & +230 \\
+V4 binary/DEFLATE & 268 & 279 & Yes & +225 \\
+\bottomrule
+\end{tabular}}
+\label{tab:encoding}
+\end{center}
+\end{table}

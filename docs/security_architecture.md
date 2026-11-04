@@ -1,10 +1,10 @@
-# LifeTag Security Architecture
+# AegisTag Security Architecture
 
-This document outlines the zero-trust security model, cryptographic protocols, and defensive layers implemented in the LifeTag system.
+This document outlines the zero-trust security model, cryptographic protocols, and defensive layers implemented in the AegisTag system.
 
 ## 1. Cryptographic Proximity Proofs (NFC)
 
-LifeTag utilizes asymmetric cryptography to prove that an NFC scan actually occurred with a physical, authorized tag, preventing remote spoofing.
+AegisTag utilizes asymmetric cryptography to prove that an NFC scan actually occurred with a physical, authorized tag, preventing remote spoofing.
 
 ### Patient Wallet (IndexedDB)
 - **ECDSA P-256 Key Pair**: Generated locally in the browser upon tag creation.

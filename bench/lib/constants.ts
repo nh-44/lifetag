@@ -5,7 +5,7 @@
  * byte budgets available to an NDEF message + its TLV wrapper — i.e. the
  * ceiling that `totalTagBytes` in this benchmark suite must clear.
  *
- * AUDIT.md flagged that docs/lifetag_paper_draft.tex states "NTAG215/216
+ * AUDIT.md flagged that docs/aegistag_paper_draft.tex states "NTAG215/216
  * (504 bytes user memory)" — 504 B is correct for NTAG215 only; NTAG216
  * actually has 888 B. Do not conflate the two.
  */

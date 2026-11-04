@@ -1,4 +1,4 @@
-# LifeTag — Test Plan
+# AegisTag — Test Plan
 
 ## 1. Current State (as of this review)
 
@@ -28,7 +28,7 @@ Server currently has **zero** unit or integration test framework — this is the
 
 ## 3. Phase 1 — Server Unit + Integration Tests (highest priority)
 
-**Setup**: add Vitest (matches client tooling) or Jest to `server/`, plus `supertest` for HTTP-level route tests and a disposable test database (either a `DATABASE_URL` pointed at a throwaway Postgres/Docker instance, or `prisma migrate reset` against a `lifetag_test` schema in CI). Seed/teardown per test file via Prisma.
+**Setup**: add Vitest (matches client tooling) or Jest to `server/`, plus `supertest` for HTTP-level route tests and a disposable test database (either a `DATABASE_URL` pointed at a throwaway Postgres/Docker instance, or `prisma migrate reset` against a `aegistag_test` schema in CI). Seed/teardown per test file via Prisma.
 
 ### 3.1 `auth.service.ts` / `auth.controller.ts`
 - Signup: `US`/`DR`/`FR` prefix accepted only for matching role; mismatched prefix → 400.
@@ -128,7 +128,7 @@ Beyond the crypto correctness in §3.6, these test *system behavior* under the t
 
 ## 7. Phase 5 — Performance / Benchmark Tests (feeds the paper directly)
 
-This closes the `TODO` placeholders left in `docs/lifetag_paper_draft.tex` Section VII. Run via the app's own `/api/v1/benchmarks` logging, not ad hoc scripts, so results are reproducible:
+This closes the `TODO` placeholders left in `docs/aegistag_paper_draft.tex` Section VII. Run via the app's own `/api/v1/benchmarks` logging, not ad hoc scripts, so results are reproducible:
 
 - **Crypto/compression latency** (Table: Cryptographic and Compression Latency): key generation, sign, verify, gzip compress, gzip decompress — N=100 runs, report mean/min/max, on the actual target reader device (not just a dev laptop).
 - **Payload size** (Table: Payload Size): raw JSON vs. gzip size, run across a *distribution* of realistic profiles (0 allergies/1 contact up to 10 allergies/5 contacts) rather than a single fixed sample — the paper should report the range, not one point, since that's what determines whether the 504-byte NTAG215 budget actually holds in practice.
@@ -176,13 +176,13 @@ Two rules applied below:
 1. **Hardware QA is fully self-contained with Naveen** — both writing the hardware checklist and executing it, since it requires physical device possession and his existing crypto/benchmark ownership (§3.6, §7) already ties directly into it.
 2. **Everywhere else, the person who writes a test suite does not run/sign it off** — a different teammate executes it and reports results back to the author. This catches "I wrote it so of course it passes" blind spots and matches the plan's Phase 1 priority (RBAC/consent) getting a second set of eyes.
 
-Assignments below build on existing file ownership from `LifeTag_Team_Work_Division.md` where it lines up; noted explicitly where this reassigns something (Naveen's hardware and crypto ownership remains grouped together, while Navyashree takes the cross-cutting security/E2E/CI work below).
+Assignments below build on existing file ownership from `AegisTag_Team_Work_Division.md` where it lines up; noted explicitly where this reassigns something (Naveen's hardware and crypto ownership remains grouped together, while Navyashree takes the cross-cutting security/E2E/CI work below).
 
 ### Naveen — Crypto, Benchmarks & Full Hardware QA (creates *and* runs, solo)
 - §3.6 — Crypto/NFC service unit tests (`crypto.utils.ts`, `nfc.service.ts`, `security.spec.ts` port)
 - §7 — Performance/benchmark tests: crypto/compression latency, payload-size distribution, tamper-detection rate, **and** physical NFC read/write handshake timing
 - §8 — Full manual hardware QA checklist (NTAG215/216 physical trials, weak-coupling/partial-write behavior, browser-support degradation)
-- Directly feeds `docs/lifetag_paper_draft.tex` Section VII — Navyashree owns turning these results into the paper's tables
+- Directly feeds `docs/aegistag_paper_draft.tex` Section VII — Navyashree owns turning these results into the paper's tables
 
 ### Preksha — Server Unit & Integration Tests (creates)
 - §3.1 `auth.service`/`auth.controller`
@@ -215,7 +215,7 @@ Each runner reports pass/fail + coverage back to the author, not just to the gro
 
 ## 12. Team Assignment (4-Person Split)
 
-Mapped to the existing ownership in `LifeTag_Team_Work_Division.md` so each person is testing code they already know, with one person dedicated entirely to hardware QA (no software test-writing load, since physical NFC testing has its own overhead — device time, tag stock, multiple browsers/OSes).
+Mapped to the existing ownership in `AegisTag_Team_Work_Division.md` so each person is testing code they already know, with one person dedicated entirely to hardware QA (no software test-writing load, since physical NFC testing has its own overhead — device time, tag stock, multiple browsers/OSes).
 
 ### Navyashree — Crypto & Software Benchmarks
 - §3.6 — `crypto.utils.ts` / `nfc.service.ts` unit tests (port `security.spec.ts` into the new framework, add the new cases: missing authority signature, forged authority signature, malformed JWK, byte-budget across profile sizes).
@@ -243,4 +243,4 @@ Mapped to the existing ownership in `LifeTag_Team_Work_Division.md` so each pers
 
 ### Cross-cutting notes
 - **Blocking order**: Preksha's server test-framework setup (§9) blocks Naveen's and Preksha's own unit tests, which block Nandita's E2E work. Navyashree's security/E2E/CI work depends on the relevant test layers, while Naveen's hardware QA can start immediately in parallel.
-- **Shared deliverable**: the paper's Results section (Section VII of `lifetag_paper_draft.tex`) needs both Navyashree's software-side numbers and Naveen's hardware-side numbers — flag this as a joint checkpoint before that section can be finalized, not two independent handoffs.
+- **Shared deliverable**: the paper's Results section (Section VII of `aegistag_paper_draft.tex`) needs both Navyashree's software-side numbers and Naveen's hardware-side numbers — flag this as a joint checkpoint before that section can be finalized, not two independent handoffs.

@@ -1,6 +1,6 @@
-# LifeTag Production Deployment & Launch Guide
+# AegisTag Production Deployment & Launch Guide
 
-This guide outlines the step-by-step deployment procedure for the LifeTag ecosystem (React Frontend, Express Backend, Prisma ORM, and PostgreSQL Database) and assigns launch ownership across the team.
+This guide outlines the step-by-step deployment procedure for the AegisTag ecosystem (React Frontend, Express Backend, Prisma ORM, and PostgreSQL Database) and assigns launch ownership across the team.
 
 ---
 
@@ -21,12 +21,12 @@ graph TD
 ## 🚀 Step-by-Step Deployment Procedure
 
 ### Phase 1: Database Provisioning (Neon or Supabase)
-1. **Create Instance**: Sign up on [Neon.tech](https://neon.tech/) or [Supabase](https://supabase.com/) and create a serverless PostgreSQL database named `lifetag_prod`.
+1. **Create Instance**: Sign up on [Neon.tech](https://neon.tech/) or [Supabase](https://supabase.com/) and create a serverless PostgreSQL database named `aegistag_prod`.
 2. **Retrieve Connection String**: Copy the connection string (with transaction pooling enabled if deploying to serverless environments).
-   - Format: `postgresql://<USER>:<PASSWORD>@<HOST>/lifetag_prod?sslmode=require`
+   - Format: `postgresql://<USER>:<PASSWORD>@<HOST>/aegistag_prod?sslmode=require`
 
 ### Phase 2: Express Server Deployment (Render, Railway, or Fly.io)
-1. **New Service**: Link the GitHub repository `https://github.com/nh-44/lifetag.git` to [Railway.app](https://railway.app/) or [Render.com](https://render.com/).
+1. **New Service**: Link the GitHub repository `https://github.com/nh-44/aegistag.git` to [Railway.app](https://railway.app/) or [Render.com](https://render.com/).
 2. **Build Settings**:
    - Root Directory: `server/`
    - Build Command: `npm install && npm run build`
@@ -54,9 +54,24 @@ graph TD
    - Build Command: `npm run build`
    - Output Directory: `dist`
 3. **Environment Variables**:
-   - `VITE_API_URL`: *(The URL of your deployed Express server, e.g. `https://lifetag-server.up.railway.app/api/v1`)*
+   - `VITE_API_URL`: *(The URL of your deployed Express server, e.g. `https://aegistag-server.up.railway.app/api/v1`)*
 
 ---
+
+## 🔐 Security Setup (required since the INDICON 2026 revision)
+
+1. **Create the schema on a fresh database** with `npx prisma migrate deploy` (one squashed migration, `20261104000000_init`), then optionally `npx prisma db seed` for the demo accounts (their clinicians are pre-verified).
+2. **Verify clinicians.** Self-registered doctor and first-responder accounts start *unverified* and cannot issue tags, log scans, or open patient records. After checking a clinician's licence or agency credentials, the Healthcare Authority operator runs:
+   ```bash
+   cd server
+   npx ts-node scripts/verify-clinician.ts --list            # pending accounts
+   npx ts-node scripts/verify-clinician.ts DR12345           # verify
+   npx ts-node scripts/verify-clinician.ts DR12345 --revoke  # withdraw
+   ```
+   A clinician who changes their licence number or agency ID drops back to unverified.
+3. **Authority trust anchor.** Run `npx ts-node scripts/print-authority-public-key.ts` and set the printed `VITE_AUTHORITY_PUBLIC_KEYS` on the client (Vercel), then redeploy the client.
+4. **Environment.** `JWT_SECRET` must be ≥ 32 characters in production. `TRUST_PROXY` defaults to 1 in production. `BENCHMARK_LOGGING` is off in production unless set to `true`.
+5. **Client headers.** `client/vercel.json` sets a Content-Security-Policy, `frame-ancestors 'none'`, and `Permissions-Policy: nfc=(self)`. If the API is not on an `https:` origin, adjust `connect-src`.
 
 ## 👥 Division of Work (Launch Day Checklist)
 

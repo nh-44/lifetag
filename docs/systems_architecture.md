@@ -1,7 +1,7 @@
-# LifeTag Systems Architecture
+# AegisTag Systems Architecture
 
 ## Overview
-LifeTag is a consolidated emergency medical profile application backed by a decentralized NFC hardware toolkit. The platform guarantees offline-resilient access to critical triage data (blood group, allergies, DNR status) for first responders while securing sensitive medical history under strict Role-Based Access Control (RBAC).
+AegisTag is a consolidated emergency medical profile application backed by a decentralized NFC hardware toolkit. The platform guarantees offline-resilient access to critical triage data (blood group, allergies, DNR status) for first responders while securing sensitive medical history under strict Role-Based Access Control (RBAC).
 
 ## Architecture Stack
 

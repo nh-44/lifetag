@@ -1,57 +1,76 @@
-# NFC_PROTOCOL.md — Physical Trial Protocol (Phase 5 + mobile halves of Phase 3 & 6)
+# NFC_PROTOCOL.md — Physical Trial Protocol (NFC Lab, lab v2)
 
-This is the one remaining piece of data collection that cannot be automated — it requires a real Android phone, a real Chrome browser, and a real NTAG216 tag. Everything else in the benchmark suite (Phases 0, 1, 2, 3-Node, 4, 6-Node) is already done; see `RESULTS_LOG.md` for what ran and `results/*.json` for the output.
+Physical NFC reliability is the one measurement that needs a real Android phone and real tags. The NFC Lab page (`/bench/nfc`, `client/src/pages/BenchNfc.tsx`) runs every trial through the same Web NFC and codec code the production Tag Writer and scanner use (`client/src/lib/webNfc.ts`, `client/src/lib/tagCodec.ts`), records the full condition of every trial, and exports a CSV that `bench/process-nfc-lab.ts` turns into the paper's tables.
 
-The page that produces this data is real, working code (`client/src/pages/BenchNfc.tsx`, route `/bench/nfc`), already type-checked and build-verified. It needs a deployed client + backend and a phone to actually run.
+This replaces the earlier single-condition protocol (20 reads / 15 writes at 1 cm), which the INDICON 2026 reviewers asked to extend across devices, orientations, distances and environments.
 
-## Deployment configuration (Vercel client + Render backend)
+## What changed since the first trial round (why writes failed before)
 
-**Backend (Render web service, root directory `server/`):**
-- Build command: `npm install && npm run build`
-- Start command: `npm start`
-- Required environment variables:
-  - `DATABASE_URL` — your Postgres connection string (Render Postgres, Neon, Supabase, etc.)
-  - `JWT_SECRET` — any long random string
-  - `AUTHORITY_PRIVATE_KEY` — a real ECDSA P-256 JWK private key (see `server/.env.example` for the one-liner to generate one)
-  - `CORS_ORIGIN` — your **exact** Vercel URL, e.g. `https://your-app.vercel.app` (no trailing slash — the server does an exact string match, not a wildcard)
-  - `NODE_ENV=production`
-  - `PORT` — Render sets this automatically, no action needed
-- After first deploy, run the Prisma migrations against your production database once (`npx prisma migrate deploy` from `server/`, with `DATABASE_URL` pointed at production — Render's shell tab or a local terminal with the same `DATABASE_URL` both work).
+| Symptom in the first round | Cause | Fix |
+|---|---|---|
+| `AbortError: The push operation is cancelled` | A second write started while one was pending (second button press or a retry). Chrome cancels the earlier write. | One NFC operation per page (`webNfc.ts` lock); buttons disabled while an operation runs. |
+| Scanner hangs on some tags | Unreadable tags fire `readingerror`; the old code listened for `"error"`, which Web NFC never fires. | `readingerror` handled; every operation has a timeout and is always aborted on exit. |
+| Writes needed third-party apps | Writes waited forever with no timeout or cancel. Unsupported browsers silently ran a simulation. The size check measured the wrong thing. | 20 s timeouts, cancel, real error messages with next steps, no simulation, exact on-tag byte check. |
+| Long write times | The write started only after a network round trip to the backend. | Writer is now *Prepare & certify* (network) → *Write* (separate button press, NFC only). |
+| "Handshake" times include hand movement | The timer started at the button press. | Each trial records its **placement**: `tap` (approach after start, what a responder experiences) or `resting` (tag in place before start, closest to stack + RF latency). |
 
-**Frontend (Vercel, root directory `client/`):**
-- It already has `vercel.json` configured (SPA rewrites).
-- Required environment variable: `VITE_API_URL` = `https://your-backend.onrender.com/api/v1` (must include the `/api/v1` suffix — this is a build-time variable, so redeploy after setting/changing it).
+## Setup
 
-Once both are deployed and `VITE_API_URL`/`CORS_ORIGIN` point at each other correctly, open `https://your-app.vercel.app/bench/nfc` in Chrome on your phone. Web NFC requires HTTPS, which Vercel gives you automatically, so no tunnel/ngrok setup is needed.
+**Backend (Render):** as before (`DATABASE_URL`, `JWT_SECRET`, `AUTHORITY_PRIVATE_KEY`, `CORS_ORIGIN`, `NODE_ENV=production`). On the fresh database, create the schema once with `npx prisma migrate deploy` from `server/` (and `npx prisma db seed` for demo accounts).
 
-## Using the page
+**Frontend (Vercel):** `VITE_API_URL` as before, plus `VITE_AUTHORITY_PUBLIC_KEYS`. Generate it with `cd server && npx ts-node scripts/print-authority-public-key.ts`, then redeploy. The Lab itself works without a backend (lab tags carry a lab-only certificate), but the production writer needs one.
 
-The page is intentionally simple — no dropdowns to fill in before every tap:
+**Phone:**
+- Chrome on Android, opened at the `https://` URL. iOS and desktop browsers have no Web NFC.
+- NFC switched on in Android settings.
+- Close NFC Tools and similar apps, which grab tags before Chrome can.
+- On the first tap, allow the NFC permission prompt.
+- Keep the screen on. The Lab requests a wake lock, but if the screen locks, Chrome cancels the operation.
 
-1. **Device info** auto-fills (model/Android/Chrome version) — only touch it if a field is blank or wrong.
-2. **Tag unit cost (₹)** — fill this in once; the paper's "low-cost" claim needs a real number here.
-3. **Run a trial**: there's one optional "note" text field (leave the default, or jot something like "1cm, flat" if you want to informally vary distance/angle across a few taps — it's just a free-text label, not required). Tap **Run READ trial** or **Run WRITE trial**, then present the tag to the phone.
-   - For a **write** trial: use the blank NTAG216 tag. It writes a real, validly-signed test payload.
-   - For a **read** trial: use a tag that's already been written (by a write trial, or by the app's real Tag Writer flow).
-   - A failed/timed-out attempt is recorded automatically as a failure — don't discard it, just try again; the retry count tracks itself.
-4. **Run the crypto latency benchmark** once — no tapping involved, takes a few seconds.
+**Tags:** label each physical tag (Tag A, Tag B, …) and pick its model in *Session*. Record the unit cost (₹) once.
 
-## How many taps
+## Before any trials: section 1
 
-Aim for **around 50 read trials and 50 write trials** at whatever your normal, comfortable tapping distance/angle is (that's plenty for a mean/median/success-rate number). More is better if you have time or curiosity, but 50+50 is enough to report real values rather than a token handful. Don't feel obligated to systematically vary distance/orientation/material — that was in an earlier, more elaborate version of this plan; for a straightforward first pass, consistent normal-use taps are exactly what's needed. If you do happen to try a few taps at an unusual distance or through a phone case, jot that in the note field — free bonus data, not a requirement.
+Open `/bench/nfc` and check the Environment table. Every line should be green. Then press **Run self-test (no tag)**: it encodes, decodes and verifies every payload profile in both formats on the phone itself. It must say *Self-test passed*.
+
+## Trial types
+
+| Type | Needs | Pass means |
+|---|---|---|
+| Read + verify | a tag written by the Lab | read, decoded, signature valid |
+| Write (blank tag only) | a blank or erased tag | write with `overwrite:false` succeeded |
+| Write + read-back verify | any writable tag | written, then read back byte-identical |
+| Overwrite + read-back | a tag that already holds data | old data replaced, read back byte-identical |
+| Overwrite protection (must refuse) | a tag that already holds data | write with `overwrite:false` was **refused** as not-empty |
+| Erase | any writable tag | erased, then read back blank |
+| Tampered tag (must reject) | a tag from *Setup: write tampered tag* | the app **rejected** it (a blank tag does not count) |
+
+For write + read-back trials, keep the tag in place after the write. If nothing happens, lift the tag and tap again.
+
+## Recommended plan (about 540 trials, roughly 2 hours)
+
+Use section 4 (*Planned run*): tick the levels, tick the trial types, set repetitions, and press **Generate plan**. The order is randomized. Follow the *Next* instructions and press **Run step** for each one. Export after every phase, since the data is kept only on the phone until you do.
+
+| Phase | Vary | Trial types | Reps | Trials | Answers |
+|---|---|---|---|---|---|
+| A. Core reliability | format: V3, V1 | Read; Write + read-back | 50 | 200 | sample size; V1 vs V3 write reliability (V3 writes ~2× fewer bytes) |
+| B. Distance | 0, 1, 2, 3, 4 cm | Read; Write + read-back | 10 | 100 | distance |
+| C. Orientation | 0°, 45°, 90° | Read; Write + read-back | 10 | 60 | orientation |
+| D. Medium | bare, wristband, phone case, metal, skin | Read; Write + read-back | 10 | 100 | environment |
+| E. Placement | tap, resting | Read | 20 | 40 | separates hand movement from system latency |
+| F. Safety functions | — | Overwrite, Overwrite protection, Erase, Tampered tag | 10 | 40 | overwrite semantics and tamper detection on real hardware |
+| G. Second device/tag (if available) | — | Phase A at 20 reps | 20 | 80 | device and tag variation |
+
+Keep unvaried factors at the defaults (1 cm, coplanar, bare, tap, V3, medium). Measure distance with a ruler or a stack of cards. "On metal" means the tag lies on a metal surface with the phone above it.
+
+Then press **Run benchmark (no tag)** in section 6 once per device and download `crypto-latency-mobile.json`.
 
 ## Handing the data back
 
-1. Tap **Export CSV** → gives you `nfc-trials.csv`.
-2. Tap **Download crypto-latency-mobile.json**.
-3. Put both files in this repo at `results/nfc-trials.csv` and `results/crypto-latency-mobile.json`.
-4. Optionally tap **POST all to backend** to also log the raw handshake timings server-side via `/api/v1/benchmarks/log` (this endpoint has no auth — see AUDIT.md item 2 — fine for your own database, just don't do this against a shared/public deployment).
-5. Tell me the tag's unit cost (₹) and that the files are in place — I'll take it from there into Phase 6's write-up and Phase 7's paper sections.
+1. **Export CSV** after each phase. The file is `nfc-lab-<session>.csv`, and exporting repeatedly is safe because duplicates are removed by trial id.
+2. Put every CSV in `results/` as `results/nfc-lab-*.csv`, and the benchmark file as `results/crypto-latency-mobile.json`.
+3. Run `npm run bench:nfc-lab` then `npm run bench:tables`. This writes `results/nfc-lab-summary.json`, `paper/tables/nfc-lab.tex` and `paper/tables/nfc-lab-factors.tex`.
 
-## One honesty note
+## Honesty rules (unchanged)
 
-Whatever numbers come out — even if a tap is slow, or a few fail — report them as-is. Don't re-run and keep only the best attempts; the paper's NFC Reliability section is exactly the place a slow tap or two belongs, and a suspiciously perfect 100% success rate would be less credible, not more.
-
-## Why NTAG216, not NTAG215
-
-This benchmark suite's byte-budget analysis (Phases 1, 2, 6) targets the 504-byte NTAG215 budget — the more conservative target. NTAG216 (888 B) is what's physically available, so that's what the handshake-timing numbers here will be measured on. This is fine to state plainly in the paper: analytical byte-budget target = NTAG215 (conservative), physical timing hardware = NTAG216 (what was available). NTAG213/215/216 share the same RF interface and protocol, so handshake latency shouldn't differ meaningfully by memory size at these payload sizes — but that's not something to claim as measured fact, only report what was actually measured on NTAG216.
+Report every trial, including failures and timeouts. Never re-run to keep only good attempts; the randomized plan exists so that bad luck cannot be quietly dropped. Skipped plan steps stay absent rather than being filled in. The Wilson intervals in the tables show how much a pass rate really says: 20/20 is only "≥84% at 95% confidence".

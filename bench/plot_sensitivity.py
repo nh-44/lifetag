@@ -16,6 +16,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+# Sized for one IEEE column (3.5 in) so text renders at ~8-9 pt in print.
+plt.rcParams.update({"font.size": 8.5, "axes.labelsize": 8.5, "legend.fontsize": 7.5, "xtick.labelsize": 8, "ytick.labelsize": 8})
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(HERE)
 
@@ -26,7 +29,7 @@ cells = data["cells"]
 budget = data["meta"]["ntag215BudgetBytes"]
 contact_counts = data["meta"]["contactCounts"]
 
-fig, ax = plt.subplots(figsize=(6, 4))
+fig, ax = plt.subplots(figsize=(3.5, 2.5))
 
 colors = {1: "#1b6ca8", 2: "#c1440e", 3: "#2e8b57"}
 
@@ -47,17 +50,16 @@ for cc in contact_counts:
         ax.plot(bridge_x, bridge_y, marker="o", markerfacecolor="white",
                  color=colors[cc], linewidth=1.5, linestyle="--")
 
-ax.axhline(budget, color="black", linewidth=1.2, linestyle=":")
-ax.text(0.5, budget + 8, f"NTAG215 budget ({budget} B)", fontsize=9, va="bottom")
+ax.axhline(budget, color="black", linewidth=1.0, linestyle=":")
+ax.text(0.5, budget + 6, f"NTAG215 budget ({budget} B)", fontsize=7.5, va="bottom")
 
+# Realism marker labelled at the top, clear of the legend (lower right) and the budget label (left).
 ax.axvline(12, color="gray", linewidth=0.8, linestyle=":")
-ax.text(12.3, ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 10, "curated realism\nlimit (12)",
-        fontsize=7.5, color="gray", va="bottom")
+ax.text(12.4, 595, "realistic\nrange ends", fontsize=7, color="dimgray", va="top")
 
 ax.set_xlabel("Allergy entries")
-ax.set_ylabel("Total tag bytes (V3 encoding)")
-ax.set_title("Payload size vs. allergy count and contact count (V3)")
-ax.legend(loc="upper left", fontsize=9, title="Emergency contacts")
+ax.set_ylabel("Total tag bytes (V3)")
+ax.legend(loc="lower right", title="Emergency contacts", title_fontsize=7.5, framealpha=0.95)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 

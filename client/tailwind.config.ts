@@ -62,7 +62,7 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				},
-				lifetag: {
+				aegistag: {
 					primary: '#0A6EBD',
 					secondary: '#45CFDD',
 					light: '#E5F4F8',

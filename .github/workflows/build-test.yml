@@ -1,4 +1,4 @@
-name: LifeTag Build & Test CI
+name: AegisTag Build & Test CI
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: lifetag_test
+          POSTGRES_DB: aegistag_test
         ports:
           - 5432:5432
         options: >-
@@ -90,12 +90,45 @@ jobs:
         cd server
         npx prisma db push
       env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lifetag_test?schema=public
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aegistag_test?schema=public
 
     - name: Run Server Tests
       run: |
         cd server
         npm run test
       env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lifetag_test?schema=public
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aegistag_test?schema=public
 
+
+  paper-benchmarks:
+    name: Reproduce Paper Security Results
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: 'package-lock.json'
+
+    - name: Install benchmark dependencies
+      run: npm ci
+
+    # Fails the build if any of the 12 attack classes is ever accepted or a valid
+    # control tag is rejected (bench/tamper.ts sets a non-zero exit code).
+    - name: Tamper-detection suite (2,600 trials)
+      run: npm run bench:tamper
+
+    - name: Regenerate paper tables from results
+      run: npm run bench:tables
+
+    - name: Upload regenerated results and tables
+      uses: actions/upload-artifact@v4
+      with:
+        name: paper-results
+        path: |
+          results/tamper.json
+          paper/tables/*.tex

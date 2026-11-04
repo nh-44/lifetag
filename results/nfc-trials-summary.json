@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-31T09:30:18.896Z",
+    "source": "results/nfc-trials.csv (human-collected, real Android device + real NTAG216 tag)",
+    "note": "5 write trial(s) collected before the write-retry/dangling-session fix shipped are excluded from the write stats below (all 5 were failures, measuring the since-fixed bug, not current reliability) but retained in the raw CSV for provenance."
+  },
+  "read": {
+    "n": 20,
+    "successCount": 20,
+    "failureCount": 0,
+    "successRate": 1,
+    "handshakeMs": {
+      "n": 20,
+      "meanMs": 1338.265,
+      "medianMs": 934.25,
+      "stdDevMs": 1281.485,
+      "minMs": 160.3,
+      "maxMs": 5799.9,
+      "p95Ms": 2978.9
+    },
+    "tapToRenderMs": {
+      "n": 20,
+      "meanMs": 1368.02,
+      "medianMs": 966.5,
+      "stdDevMs": 1280.269,
+      "minMs": 184.9,
+      "maxMs": 5828.2,
+      "p95Ms": 3000.3
+    }
+  },
+  "write": {
+    "n": 15,
+    "nExcludedPreFix": 5,
+    "successCount": 13,
+    "failureCount": 2,
+    "successRate": 0.8666666666666667,
+    "handshakeMs": {
+      "n": 13,
+      "meanMs": 4294.385,
+      "medianMs": 2199,
+      "stdDevMs": 3470.91,
+      "minMs": 1711.2,
+      "maxMs": 13217.7,
+      "p95Ms": 13217.7
+    },
+    "errorMessages": [
+      "AbortError: The push operation is cancelled.",
+      "AbortError: The push operation is cancelled."
+    ]
+  }
+}

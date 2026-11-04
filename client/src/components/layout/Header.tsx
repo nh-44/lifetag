@@ -68,7 +68,7 @@ const Header = () => {
             <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold">
               LT
             </div>
-            <span className="text-2xl font-bold text-blue-700">LifeTag</span>
+            <span className="text-2xl font-bold text-blue-700">AegisTag</span>
           </Link>
 
           <Link to="/tag-tracer" className="hidden md:flex items-center space-x-1 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors">

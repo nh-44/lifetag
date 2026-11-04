@@ -90,13 +90,10 @@ const EmergencyInfo = () => {
             setTrustError('Cryptographic verification encountered an error.');
           }
         } else {
-          // No raw payload — data came from server API.
-          // Show authority registration status from server data.
-          if (data.authoritySignature) {
-            setTrustStatus('authority-certified');
-          } else {
-            setTrustStatus('server-verified');
-          }
+          // No raw payload: the data came from the authenticated server API, not a tag.
+          // A stored certificate says nothing about the data shown here, so never
+          // label it "Authority Certified".
+          setTrustStatus('server-verified');
         }
       } catch (err) {
         console.error('Error fetching information:', err);
@@ -115,7 +112,7 @@ const EmergencyInfo = () => {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lifetag-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aegistag-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading emergency information...</p>
         </div>
       </div>
@@ -127,7 +124,7 @@ const EmergencyInfo = () => {
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Emergency Information</h1>
-          <Badge className="bg-lifetag-primary">First Responder View</Badge>
+          <Badge className="bg-aegistag-primary">First Responder View</Badge>
         </div>
         
         {error ? (
@@ -141,7 +138,7 @@ const EmergencyInfo = () => {
           <div className="space-y-6">
             <TrustBadge status={trustStatus} errorMessage={trustError} />
             <Card>
-              <CardHeader className="bg-lifetag-light">
+              <CardHeader className="bg-aegistag-light">
                 <CardTitle className="flex items-center">
                   <CheckCircle2 className="h-5 w-5 mr-2 text-green-600" />
                   Patient Information
@@ -217,7 +214,7 @@ const EmergencyInfo = () => {
             </div>
             
             <Card>
-              <CardHeader className="bg-lifetag-light">
+              <CardHeader className="bg-aegistag-light">
                 <CardTitle>Emergency Contacts</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
@@ -245,7 +242,7 @@ const EmergencyInfo = () => {
             </Card>
             
             <Card>
-              <CardHeader className="bg-lifetag-light">
+              <CardHeader className="bg-aegistag-light">
                 <CardTitle>Medical Information</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">

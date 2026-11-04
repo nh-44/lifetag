@@ -62,7 +62,7 @@ const MyContacts = () => {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lifetag-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aegistag-primary mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading contacts...</p>
         </div>
       </div>
@@ -87,9 +87,9 @@ const MyContacts = () => {
               <div className="grid grid-cols-1 gap-4">
                 {profile.emergencyContacts.map((contact, index) => (
                   <Card key={index}>
-                    <CardHeader className="bg-lifetag-light">
+                    <CardHeader className="bg-aegistag-light">
                       <CardTitle className="flex items-center">
-                        <User className="h-5 w-5 mr-2 text-lifetag-primary" />
+                        <User className="h-5 w-5 mr-2 text-aegistag-primary" />
                         Contact {index + 1}
                       </CardTitle>
                       <CardDescription>Emergency Contact</CardDescription>
@@ -127,7 +127,7 @@ const MyContacts = () => {
                 Return to Home
               </Button>
               <Button 
-                className="bg-lifetag-primary hover:bg-lifetag-dark"
+                className="bg-aegistag-primary hover:bg-aegistag-dark"
                 onClick={() => navigate('/edit-profile')}
               >
                 Edit Contacts

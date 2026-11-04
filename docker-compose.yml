@@ -1,12 +1,12 @@
 services:
   db:
     image: postgres:14-alpine
-    container_name: lifetag-postgres
+    container_name: aegistag-postgres
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: lifetag_db
+      POSTGRES_DB: aegistag_db
     ports:
       - '5433:5432'
     volumes:

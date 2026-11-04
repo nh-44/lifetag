@@ -17,39 +17,30 @@ import {
 import { makeToken, makeAuthHeader } from '../helpers/authHelpers';
 import { Role } from '../../constants/roles';
 
-// ─── Minimal valid tag payload (patient-signed, no authority cert) ────────────
-// Using ECDSA P-256 keys generated for tests. The patient key and signature
-// here are pre-generated and match the triageData below.
-//
-// NOTE: For integration tests we mock NfcService.verifyTagIntegrity to always
-// return verified:true so we can test the scan routing without real crypto.
-// Crypto correctness is Naveen's §3.6 responsibility.
+// Real v3 tags signed with a throwaway authority key (see helpers/tagFactory).
+// Verification is NOT mocked: these tests run the production crypto path.
+import { afterEach } from 'vitest';
+import { buildTag, installTestAuthority, AuthorityFixture } from '../helpers/tagFactory';
 
-import { vi } from 'vitest';
-vi.mock('../../services/nfc.service', () => ({
-  NfcService: {
-    verifyTagIntegrity: vi.fn(() => ({ verified: true, trustedAuthority: true })),
-  },
-}));
+let authority: AuthorityFixture;
+let MOCK_TAG_PAYLOAD: ReturnType<typeof buildTag>;
 
-const MOCK_TAG_PAYLOAD = {
-  version: '1.0',
-  tagId: JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'test', y: 'test' }),
-  timestamp: new Date().toISOString(),
-  fhirPatientId: 'FHIR-TEST-001',
-  triageData: {
-    name: 'Test Patient',
-    bloodGroup: 'O+',
-    allergies: ['Peanuts'],
-    emergencyContacts: [{ userId: 'US99999', name: 'Mom' }],
-    dnrStatus: false,
-  },
-  signature: 'dGVzdHNpZ25hdHVyZQ==', // base64("testsignature") — mocked verification
-};
+/** Issues a certified tag for the patient and records it as their current issuance. */
+async function issueCurrentTag(user: { userId: string; accountId: string }) {
+  const issuedAtSec = Math.floor(Date.now() / 1000);
+  await testPrisma.triageProfile.update({
+    where: { userId: user.userId },
+    data: { tagIssuedAt: new Date(issuedAtSec * 1000) },
+  });
+  return buildTag({ fhirPatientId: user.accountId, issuedAtSec, authorityKey: authority.privateKey });
+}
+
+afterEach(() => authority.restore());
 
 beforeEach(async () => {
   await cleanDb();
-  vi.clearAllMocks();
+  authority = installTestAuthority();
+  MOCK_TAG_PAYLOAD = buildTag({ fhirPatientId: '90001', authorityKey: authority.privateKey });
 });
 
 // ─── POST /api/v1/scans ───────────────────────────────────────────────────────
@@ -116,16 +107,19 @@ describe('POST /api/v1/scans', () => {
     const { responder } = await seedFirstResponder({ userId: 'FR90001' });
     const token = makeToken(responder.userId, Role.FIRST_RESPONDER);
     const { user } = await seedUser({ userId: 'US90001', accountId: '90001' });
+    const tagPayload = await issueCurrentTag(user);
 
     const res = await request(app)
       .post('/api/v1/scans')
       .set(makeAuthHeader(token))
       .send({
         patientAccount: user.accountId,
-        tagPayload: MOCK_TAG_PAYLOAD,
+        tagPayload,
       });
 
     expect(res.status).toBe(201);
+    expect(res.body.data.certified).toBe(true);
+    expect(res.body.data.freshness).toBe('current');
 
     // Confirm the row landed in the DB immediately
     const row = await testPrisma.scanAuditLog.findFirst({
@@ -153,10 +147,11 @@ describe('POST /api/v1/scans', () => {
     expect(before.status).toBe(403);
 
     // Step 2: Log scan
+    const tagPayload = await issueCurrentTag(user);
     await request(app)
       .post('/api/v1/scans')
       .set(makeAuthHeader(token))
-      .send({ patientAccount: user.accountId, tagPayload: MOCK_TAG_PAYLOAD });
+      .send({ patientAccount: user.accountId, tagPayload });
 
     // Step 3: Access granted immediately
     const after = await request(app)
@@ -215,7 +210,7 @@ describe('GET /api/v1/scans/export', () => {
     
     // Check CSV contents
     const lines = res.text.split('\n');
-    expect(lines[0]).toBe('id,patientAccount,timestamp,deviceMeta');
+    expect(lines[0]).toBe('id,patientAccount,timestamp,certified,tagFreshness,deviceMeta');
     expect(lines[1]).toContain('00001');
     expect(lines[1]).toContain('Test Device [Self-Signed]');
   });

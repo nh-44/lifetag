@@ -12,6 +12,7 @@ import {
   cleanDb,
   seedUser,
   seedDoctor,
+  seedFirstResponder,
   seedScanAuditLog,
   testPrisma,
 } from '../helpers/testDb';
@@ -47,6 +48,7 @@ describe('GET /api/v1/patients/triage/:accountId', () => {
 
   it('returns 200 with triage-only fields for an authenticated FIRST_RESPONDER', async () => {
     const { user } = await seedUser({ userId: 'US80003', accountId: '80003' });
+    await seedFirstResponder({ userId: 'FR80003' });
     const token = makeToken('FR80003', Role.FIRST_RESPONDER);
 
     const res = await request(app)
@@ -66,6 +68,7 @@ describe('GET /api/v1/patients/triage/:accountId', () => {
 
   it('returns 200 with triage-only fields for an authenticated DOCTOR', async () => {
     const { user } = await seedUser({ userId: 'US80004', accountId: '80004' });
+    await seedDoctor({ userId: 'DR80004' });
     const token = makeToken('DR80004', Role.DOCTOR);
 
     const res = await request(app)
@@ -76,7 +79,35 @@ describe('GET /api/v1/patients/triage/:accountId', () => {
     expect(res.body.data).not.toHaveProperty('doctorOnlyInfo');
   });
 
+  it('REGRESSION: an unverified (self-registered) clinician cannot read triage data', async () => {
+    const { user } = await seedUser({ userId: 'US80005', accountId: '80005' });
+    await seedFirstResponder({ userId: 'FR80005', verified: false });
+    const token = makeToken('FR80005', Role.FIRST_RESPONDER);
+
+    const res = await request(app)
+      .get(`/api/v1/patients/triage/${user.accountId}`)
+      .set(makeAuthHeader(token));
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toMatch(/awaiting verification/);
+  });
+
+  it('online triage lookups are written to the patient-visible access log', async () => {
+    const { user } = await seedUser({ userId: 'US80006', accountId: '80006' });
+    await seedFirstResponder({ userId: 'FR80006' });
+    await request(app)
+      .get(`/api/v1/patients/triage/${user.accountId}`)
+      .set(makeAuthHeader(makeToken('FR80006', Role.FIRST_RESPONDER)));
+
+    const log = await request(app)
+      .get('/api/v1/patients/me/access-log')
+      .set(makeAuthHeader(makeToken(user.userId, Role.USER)));
+    expect(log.status).toBe(200);
+    expect(log.body.data[0]).toMatchObject({ scannedBy: 'FR80006', accessType: 'online-lookup', certified: false });
+  });
+
   it('returns 404 when accountId does not exist', async () => {
+    await seedFirstResponder({ userId: 'FR00000' });
     const token = makeToken('FR00000', Role.FIRST_RESPONDER);
 
     const res = await request(app)

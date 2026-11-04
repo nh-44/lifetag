@@ -29,6 +29,8 @@ CREATE TABLE "DoctorProfile" (
     "qualifications" TEXT[],
     "hospitalClinic" TEXT NOT NULL,
     "specialty" TEXT NOT NULL,
+    "verified" BOOLEAN NOT NULL DEFAULT false,
+    "verifiedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DoctorProfile_pkey" PRIMARY KEY ("id")
@@ -46,6 +48,8 @@ CREATE TABLE "FirstResponderProfile" (
     "agencyId" TEXT NOT NULL,
     "organizationType" "OrgType" NOT NULL DEFAULT 'GOVERNMENT',
     "qualification" TEXT NOT NULL,
+    "verified" BOOLEAN NOT NULL DEFAULT false,
+    "verifiedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "FirstResponderProfile_pkey" PRIMARY KEY ("id")
@@ -63,6 +67,10 @@ CREATE TABLE "TriageProfile" (
     "organDonor" BOOLEAN NOT NULL DEFAULT false,
     "insuranceId" TEXT,
     "primaryPhysician" TEXT,
+    "authoritySignature" TEXT,
+    "tagIssuedAt" TIMESTAMP(3),
+    "tagIssuedBy" TEXT,
+    "tagRevokedAt" TIMESTAMP(3),
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "TriageProfile_pkey" PRIMARY KEY ("id")
@@ -90,8 +98,36 @@ CREATE TABLE "ScanAuditLog" (
     "patientAccount" TEXT NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "deviceMeta" TEXT,
+    "certified" BOOLEAN NOT NULL DEFAULT false,
+    "accessType" TEXT NOT NULL DEFAULT 'tag-scan',
+    "tagFreshness" TEXT,
 
     CONSTRAINT "ScanAuditLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RefreshToken" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "rotatedAt" TIMESTAMP(3),
+    "userId" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "BenchmarkLog" (
+    "id" TEXT NOT NULL,
+    "operation" TEXT NOT NULL,
+    "payloadSizeRaw" INTEGER NOT NULL,
+    "payloadSizeCompressed" INTEGER NOT NULL,
+    "timeElapsedMs" DOUBLE PRECISION NOT NULL,
+    "deviceMeta" TEXT,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "BenchmarkLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -127,8 +163,15 @@ CREATE UNIQUE INDEX "TriageProfile_userId_key" ON "TriageProfile"("userId");
 -- CreateIndex
 CREATE UNIQUE INDEX "MedicalHistory_userId_key" ON "MedicalHistory"("userId");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "RefreshToken_token_key" ON "RefreshToken"("token");
+
+-- CreateIndex
+CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
+
 -- AddForeignKey
 ALTER TABLE "TriageProfile" ADD CONSTRAINT "TriageProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("userId") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "MedicalHistory" ADD CONSTRAINT "MedicalHistory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("userId") ON DELETE CASCADE ON UPDATE CASCADE;
+

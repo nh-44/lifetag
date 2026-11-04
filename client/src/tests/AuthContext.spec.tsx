@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { authenticateUser, registerUser, checkUserIdAvailability } from '@/services/userService';
 import { tokenStorage } from '@/utils/tokenStorage';
+import { refreshAccessToken } from '@/services/api';
 
 // Mock dependencies
 vi.mock('@/services/userService', () => ({
@@ -16,10 +17,13 @@ vi.mock('@/utils/tokenStorage', () => ({
   tokenStorage: {
     setToken: vi.fn(),
     getToken: vi.fn(),
-    setRefreshToken: vi.fn(),
-    getRefreshToken: vi.fn(),
     clearTokens: vi.fn(),
   },
+}));
+
+vi.mock('@/services/api', () => ({
+  API_URL: 'http://api.test/api/v1',
+  refreshAccessToken: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -50,11 +54,11 @@ describe('AuthContext', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(refreshAccessToken).mockResolvedValue(true);
   });
 
-  it('restores user from localStorage on initialization', async () => {
-    const mockUser = { userId: 'US12345', name: 'John Doe', role: 'USER', token: 'mock-token' };
-    localStorage.setItem('lifetagUser', JSON.stringify(mockUser));
+  it('restores the profile from localStorage and the access token from the refresh cookie', async () => {
+    localStorage.setItem('aegistagUser', JSON.stringify({ userId: 'US12345', name: 'John Doe', role: 'USER' }));
 
     render(
       <AuthProvider>
@@ -62,8 +66,21 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    // Should load the user from localStorage
-    expect(screen.getByTestId('user')).toHaveTextContent('John Doe');
+    expect(await screen.findByTestId('user')).toHaveTextContent('John Doe');
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('strips a token saved by older versions from the persisted profile', async () => {
+    localStorage.setItem('aegistagUser', JSON.stringify({ userId: 'US12345', name: 'John Doe', role: 'USER', token: 'legacy-jwt' }));
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('user');
+    expect(localStorage.getItem('aegistagUser')).not.toContain('legacy-jwt');
   });
 
   it('handles successful login', async () => {
@@ -87,8 +104,10 @@ describe('AuthContext', () => {
 
     expect(screen.getByTestId('user')).toHaveTextContent('John Doe');
     expect(tokenStorage.setToken).toHaveBeenCalledWith('jwt-access-token');
-    expect(tokenStorage.setRefreshToken).toHaveBeenCalledWith('jwt-refresh-token');
-    expect(localStorage.getItem('lifetagUser')).toContain('John Doe');
+    expect(localStorage.getItem('aegistagUser')).toContain('John Doe');
+    // No token of any kind is written to Web Storage
+    expect(localStorage.getItem('aegistagUser')).not.toContain('jwt-');
+    expect(Object.keys(localStorage)).toEqual(['aegistagUser']);
   });
 
   it('handles login failure and sets error state', async () => {
@@ -130,9 +149,7 @@ describe('AuthContext', () => {
   });
 
   it('clears user state and tokens on logout', async () => {
-    const mockUser = { userId: 'US12345', name: 'John Doe', role: 'USER', token: 'mock-token' };
-    localStorage.setItem('lifetagUser', JSON.stringify(mockUser));
-    vi.mocked(tokenStorage.getRefreshToken).mockReturnValue('mock-refresh-token');
+    localStorage.setItem('aegistagUser', JSON.stringify({ userId: 'US12345', name: 'John Doe', role: 'USER' }));
 
     // Mock fetch globally
     const mockFetch = vi.fn().mockResolvedValue({} as any);
@@ -144,14 +161,15 @@ describe('AuthContext', () => {
       </AuthProvider>
     );
 
-    expect(screen.getByTestId('user')).toHaveTextContent('John Doe');
+    expect(await screen.findByTestId('user')).toHaveTextContent('John Doe');
 
     await act(async () => {
       screen.getByTestId('btn-logout').click();
     });
 
     expect(screen.getByTestId('user')).toHaveTextContent('No User');
+    expect(mockFetch).toHaveBeenCalledWith('http://api.test/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
     expect(tokenStorage.clearTokens).toHaveBeenCalled();
-    expect(localStorage.getItem('lifetagUser')).toBeNull();
+    expect(localStorage.getItem('aegistagUser')).toBeNull();
   });
 });

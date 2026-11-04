@@ -137,6 +137,35 @@ describe('PUT /api/v1/doctors/me', () => {
     expect(data.qualifications).toEqual(['MBBS', 'MD', 'DM']);
   });
 
+  it('REGRESSION (mass assignment): password, verified and userId in the body are ignored', async () => {
+    const { doctor } = await seedDoctor({ userId: 'DR90005', verified: false });
+    const before = await testPrisma.doctorProfile.findUnique({ where: { userId: doctor.userId } });
+
+    const res = await request(app)
+      .put('/api/v1/doctors/me')
+      .set(makeAuthHeader(makeToken(doctor.userId, Role.DOCTOR)))
+      .send({
+        name: doctor.name, contactInfo: '', medicalLicenseNumber: doctor.medicalLicenseNumber,
+        qualifications: [], hospitalClinic: '', specialty: '',
+        password: 'attacker-chosen', verified: true, userId: 'DR00001',
+      });
+
+    expect(res.status).toBe(200);
+    const after = await testPrisma.doctorProfile.findUnique({ where: { userId: doctor.userId } });
+    expect(after!.password).toBe(before!.password);
+    expect(after!.verified).toBe(false);
+  });
+
+  it('changing the licence number resets verification', async () => {
+    const { doctor } = await seedDoctor({ userId: 'DR90006' });
+    await request(app)
+      .put('/api/v1/doctors/me')
+      .set(makeAuthHeader(makeToken(doctor.userId, Role.DOCTOR)))
+      .send({ name: doctor.name, contactInfo: '', medicalLicenseNumber: 'ML-CHANGED', qualifications: [], hospitalClinic: '', specialty: '' });
+    const after = await testPrisma.doctorProfile.findUnique({ where: { userId: doctor.userId } });
+    expect(after!.verified).toBe(false);
+  });
+
   it('verifies the updated values persist in the database', async () => {
     const { doctor } = await seedDoctor({ userId: 'DR90004' });
     const token = makeToken(doctor.userId, Role.DOCTOR);

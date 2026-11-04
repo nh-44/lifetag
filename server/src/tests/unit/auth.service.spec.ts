@@ -31,6 +31,7 @@ vi.mock('../../repositories/firstResponderRepository', () => ({
 vi.mock('../../utils/password.utils', () => ({
   hashPassword: vi.fn(async (p: string) => `hashed:${p}`),
   verifyPassword: vi.fn(async (plain: string, hash: string) => hash === `hashed:${plain}`),
+  verifyAgainstDummy: vi.fn(async () => false),
 }));
 vi.mock('../../config/database', () => ({
   prisma: {
@@ -38,6 +39,7 @@ vi.mock('../../config/database', () => ({
       create: vi.fn(async () => ({ id: 'rt-id' })),
       findUnique: vi.fn(),
       delete: vi.fn(async () => ({})),
+      update: vi.fn(async () => ({})),
       deleteMany: vi.fn(async () => ({ count: 1 })),
     },
   },
@@ -49,6 +51,7 @@ import { doctorRepository } from '../../repositories/doctorRepository';
 import { firstResponderRepository } from '../../repositories/firstResponderRepository';
 import { prisma } from '../../config/database';
 import { Role } from '../../constants/roles';
+import { hashRefreshToken, verifyToken } from '../../utils/jwt.utils';
 
 // Typed mock helpers
 const mockUserRepo = userRepository as {
@@ -71,6 +74,7 @@ const mockPrisma = prisma as unknown as {
     create: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
   };
 };
@@ -355,6 +359,83 @@ describe('authService.refresh', () => {
   });
 });
 
+describe('login timing', () => {
+  it('runs a dummy bcrypt comparison for unknown accounts, so timing does not reveal which IDs exist', async () => {
+    const { verifyAgainstDummy } = await import('../../utils/password.utils');
+    mockUserRepo.findByUserId.mockResolvedValue(null);
+    const err = await authService.login({ userId: 'US00000', password: 'whatever1' }).catch((e) => e);
+    expect(err.statusCode).toBe(401);
+    expect(verifyAgainstDummy).toHaveBeenCalledWith('whatever1');
+  });
+});
+
+describe('refresh token hardening', () => {
+  it('rotates: consumes the presented token and returns a new, different refresh token', async () => {
+    const { makeRefreshToken } = await import('../helpers/authHelpers');
+    const rt = makeRefreshToken('US55555', Role.USER);
+    mockPrisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'rt-1', token: hashRefreshToken(rt), userId: 'US55555', expiresAt: new Date(Date.now() + 86400000),
+    });
+
+    const result = await authService.refresh(rt);
+
+    expect(mockPrisma.refreshToken.findUnique).toHaveBeenCalledWith({ where: { token: hashRefreshToken(rt) } });
+    expect(mockPrisma.refreshToken.update).toHaveBeenCalledWith({ where: { id: 'rt-1' }, data: { rotatedAt: expect.any(Date) } });
+    expect(result.refreshToken).toBeTruthy();
+    expect(result.refreshToken).not.toBe(rt);
+  });
+
+  it('REUSE DETECTION: a valid but already-consumed token revokes every session of that user', async () => {
+    const { makeRefreshToken } = await import('../helpers/authHelpers');
+    mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
+
+    const err = await authService.refresh(makeRefreshToken('US55555', Role.USER)).catch((e) => e);
+
+    expect(err.statusCode).toBe(401);
+    expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: 'US55555' } });
+  });
+
+  it('a just-rotated token presented again within the grace window (two tabs) still works', async () => {
+    const { makeRefreshToken } = await import('../helpers/authHelpers');
+    const rt = makeRefreshToken('US55555', Role.USER);
+    mockPrisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'rt-1', token: hashRefreshToken(rt), userId: 'US55555',
+      expiresAt: new Date(Date.now() + 86400000), rotatedAt: new Date(Date.now() - 5_000),
+    });
+    const result = await authService.refresh(rt);
+    expect(result.token).toBeTruthy();
+    expect(mockPrisma.refreshToken.deleteMany).not.toHaveBeenCalledWith({ where: { userId: 'US55555' } });
+  });
+
+  it('REUSE DETECTION: a rotated token replayed after the grace window revokes every session', async () => {
+    const { makeRefreshToken } = await import('../helpers/authHelpers');
+    const rt = makeRefreshToken('US55555', Role.USER);
+    mockPrisma.refreshToken.findUnique.mockResolvedValue({
+      id: 'rt-1', token: hashRefreshToken(rt), userId: 'US55555',
+      expiresAt: new Date(Date.now() + 86400000), rotatedAt: new Date(Date.now() - 120_000),
+    });
+    const err = await authService.refresh(rt).catch((e) => e);
+    expect(err.statusCode).toBe(401);
+    expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: 'US55555' } });
+  });
+
+  it('stores only a SHA-256 hash of new refresh tokens, never the token itself', async () => {
+    mockUserRepo.findByUserId.mockResolvedValue({ userId: 'US12345', name: 'A', password: 'hashed:pw' });
+    const { refreshToken } = await authService.login({ userId: 'US12345', password: 'pw' });
+    const stored = mockPrisma.refreshToken.create.mock.calls.at(-1)![0].data.token;
+    expect(stored).toBe(hashRefreshToken(refreshToken));
+    expect(stored).not.toBe(refreshToken);
+  });
+
+  it('TOKEN CONFUSION: an access token is rejected as a refresh token, and vice versa', async () => {
+    const { makeToken, makeRefreshToken } = await import('../helpers/authHelpers');
+    const err = await authService.refresh(makeToken('US55555', Role.USER)).catch((e) => e);
+    expect(err.statusCode).toBe(401);
+    expect(mockPrisma.refreshToken.findUnique).not.toHaveBeenCalled();
+    expect(() => verifyToken(makeRefreshToken('US55555', Role.USER))).toThrow(/access token/);
+  });
+});
+
 // ─── logout ───────────────────────────────────────────────────────────────────
 
 describe('authService.logout', () => {
@@ -362,7 +443,7 @@ describe('authService.logout', () => {
     const result = await authService.logout('some-valid-rt');
 
     expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
-      where: { token: 'some-valid-rt' },
+      where: { token: hashRefreshToken('some-valid-rt') },
     });
     expect(result).toEqual({ success: true });
   });

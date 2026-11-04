@@ -16,11 +16,25 @@ export const firstResponderService = {
       agencyId: responder.agencyId,
       organizationType: responder.organizationType === OrgType.GOVERNMENT ? 'Government' : (responder.organizationType === OrgType.PRIVATE ? 'Private' : 'Government Funded'),
       qualification: responder.qualification,
+      verified: responder.verified,
     };
   },
 
-  updateProfile: async (userId: string, data: FirstResponderProfileDTO) => {
-    const { userId: _userId, organizationType, ...updateData } = data;
+  updateProfile: async (userId: string, data: Omit<FirstResponderProfileDTO, 'userId'>) => {
+    const current = await firstResponderRepository.findByUserId(userId);
+    if (!current) throw { statusCode: 404, message: 'First responder not found' };
+    const { organizationType, ...rest } = data;
+    // Verification vouches for a specific agency ID; changing it requires re-verification.
+    const agencyChanged = rest.agencyId !== current.agencyId;
+    const updateData = {
+      name: rest.name,
+      occupation: rest.occupation,
+      contactInfo: rest.contactInfo,
+      agency: rest.agency,
+      agencyId: rest.agencyId,
+      qualification: rest.qualification,
+      ...(agencyChanged ? { verified: false, verifiedAt: null } : {}),
+    };
     
     let orgType: OrgType = OrgType.GOVERNMENT;
     if (organizationType === 'Private') orgType = OrgType.PRIVATE;
@@ -40,6 +54,7 @@ export const firstResponderService = {
       agencyId: updated.agencyId,
       organizationType: updated.organizationType === OrgType.GOVERNMENT ? 'Government' : (updated.organizationType === OrgType.PRIVATE ? 'Private' : 'Government Funded'),
       qualification: updated.qualification,
+      verified: updated.verified,
     };
   }
 };

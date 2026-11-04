@@ -5,6 +5,7 @@ import doctorRoutes from './doctor.routes';
 import firstResponderRoutes from './firstResponder.routes';
 import scanRoutes from './scan.routes';
 import benchmarkRoutes from './benchmark.routes';
+import issuanceRoutes from './issuance.routes';
 
 const router = Router();
 
@@ -15,5 +16,6 @@ router.use('/doctors', doctorRoutes);
 router.use('/first-responders', firstResponderRoutes);
 router.use('/scans', scanRoutes);
 router.use('/benchmarks', benchmarkRoutes);
+router.use('/issuance', issuanceRoutes);
 
 export default router;

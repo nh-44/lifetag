@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import OfflineBanner from "@/components/layout/OfflineBanner";
+import VerificationBanner from "@/components/layout/VerificationBanner";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
@@ -33,6 +34,7 @@ const App = () => (
           <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900">
             <OfflineBanner />
             <Header />
+            <VerificationBanner />
             <main className="flex-grow">
               <Routes>
                 <Route path="/" element={<Home />} />

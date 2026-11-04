@@ -14,12 +14,24 @@ export const doctorService = {
       qualifications: doctor.qualifications,
       hospitalClinic: doctor.hospitalClinic,
       specialty: doctor.specialty,
+      verified: doctor.verified,
     };
   },
 
-  updateProfile: async (userId: string, data: DoctorProfileDTO) => {
-    const { userId: _userId, ...updateData } = data;
-    const updated = await doctorRepository.update(userId, updateData);
+  updateProfile: async (userId: string, data: Omit<DoctorProfileDTO, 'userId'>) => {
+    const current = await doctorRepository.findByUserId(userId);
+    if (!current) throw { statusCode: 404, message: 'Doctor not found' };
+    // Verification vouches for a specific licence; changing it requires re-verification.
+    const licenceChanged = data.medicalLicenseNumber !== current.medicalLicenseNumber;
+    const updated = await doctorRepository.update(userId, {
+      name: data.name,
+      contactInfo: data.contactInfo,
+      medicalLicenseNumber: data.medicalLicenseNumber,
+      qualifications: data.qualifications,
+      hospitalClinic: data.hospitalClinic,
+      specialty: data.specialty,
+      ...(licenceChanged ? { verified: false, verifiedAt: null } : {}),
+    });
     
     return {
       userId: updated.userId,
@@ -29,6 +41,7 @@ export const doctorService = {
       qualifications: updated.qualifications,
       hospitalClinic: updated.hospitalClinic,
       specialty: updated.specialty,
+      verified: updated.verified,
     };
   }
 };

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-08-31T08:46:51.556Z",
+    "generatedAt": "2026-08-31T09:10:04.776Z",
     "platform": "mobile-web-crypto",
     "deviceModel": "CPH2487",
     "androidVersion": "10",
@@ -12,66 +12,66 @@
   "operations": {
     "ecdsaKeyGeneration": {
       "n": 100,
-      "meanMs": 0.086,
+      "meanMs": 0.106,
       "medianMs": 0.1,
-      "stdDevMs": 0.06,
-      "minMs": 0,
-      "maxMs": 0.3,
-      "p95Ms": 0.2
-    },
-    "signatureCreation": {
-      "n": 100,
-      "meanMs": 0.076,
-      "medianMs": 0.1,
-      "stdDevMs": 0.057,
+      "stdDevMs": 0.061,
       "minMs": 0,
       "maxMs": 0.2,
       "p95Ms": 0.2
     },
+    "signatureCreation": {
+      "n": 100,
+      "meanMs": 0.143,
+      "medianMs": 0.1,
+      "stdDevMs": 0.072,
+      "minMs": 0,
+      "maxMs": 0.6,
+      "p95Ms": 0.2
+    },
     "tier1Verification_contentSignature": {
       "n": 100,
-      "meanMs": 0.146,
-      "medianMs": 0.1,
-      "stdDevMs": 0.061,
-      "minMs": 0,
-      "maxMs": 0.3,
-      "p95Ms": 0.2
+      "meanMs": 0.253,
+      "medianMs": 0.3,
+      "stdDevMs": 0.067,
+      "minMs": 0.1,
+      "maxMs": 0.4,
+      "p95Ms": 0.3
     },
     "tier2Verification_authoritySignature": {
       "n": 100,
-      "meanMs": 0.147,
-      "medianMs": 0.1,
-      "stdDevMs": 0.056,
-      "minMs": 0,
-      "maxMs": 0.3,
-      "p95Ms": 0.2
+      "meanMs": 0.259,
+      "medianMs": 0.3,
+      "stdDevMs": 0.062,
+      "minMs": 0.1,
+      "maxMs": 0.4,
+      "p95Ms": 0.3
     },
     "compression_gzip": {
       "n": 100,
-      "meanMs": 1.077,
-      "medianMs": 1,
-      "stdDevMs": 0.605,
-      "minMs": 0.8,
-      "maxMs": 6.8,
-      "p95Ms": 1.4
+      "meanMs": 1.27,
+      "medianMs": 1.2,
+      "stdDevMs": 0.262,
+      "minMs": 0.9,
+      "maxMs": 2.3,
+      "p95Ms": 1.7
     },
     "decompression_gunzip": {
       "n": 100,
-      "meanMs": 1.239,
-      "medianMs": 1.2,
-      "stdDevMs": 0.532,
-      "minMs": 0.8,
-      "maxMs": 5.7,
-      "p95Ms": 1.6
+      "meanMs": 1.344,
+      "medianMs": 1.1,
+      "stdDevMs": 1.003,
+      "minMs": 0.9,
+      "maxMs": 8.3,
+      "p95Ms": 1.9
     },
     "scanPathTotal_decompressPlusTier1PlusTier2": {
       "n": 100,
-      "meanMs": 1.798,
-      "medianMs": 1.7,
-      "stdDevMs": 0.53,
-      "minMs": 1.2,
-      "maxMs": 5.4,
-      "p95Ms": 2.5
+      "meanMs": 2.088,
+      "medianMs": 2,
+      "stdDevMs": 0.299,
+      "minMs": 1.5,
+      "maxMs": 3,
+      "p95Ms": 2.7
     }
   }
 }

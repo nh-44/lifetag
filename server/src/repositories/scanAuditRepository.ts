@@ -14,6 +14,13 @@ export const scanAuditRepository = {
       take: 100,
     });
   },
+  findByPatient: async (patientAccount: string) => {
+    return await prisma.scanAuditLog.findMany({
+      where: { patientAccount },
+      orderBy: { timestamp: 'desc' },
+      take: 100,
+    });
+  },
   checkRecentScan: async (scannedBy: string, patientAccount: string, hours: number = 24) => {
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
     const log = await prisma.scanAuditLog.findFirst({
@@ -21,7 +28,8 @@ export const scanAuditRepository = {
         scannedBy,
         patientAccount,
         timestamp: { gte: cutoff },
-        deviceMeta: { contains: '[Authority-Certified]' }
+        // A server-computed column, never a substring of client-supplied deviceMeta
+        certified: true,
       }
     });
     return !!log;

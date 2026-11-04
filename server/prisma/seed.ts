@@ -133,6 +133,8 @@ async function main() {
       qualifications: ['M.D. Johns Hopkins University', 'Board Certified in Nephrology'],
       hospitalClinic: 'Princeton-Plainsboro Teaching Hospital',
       specialty: 'Diagnostic Medicine',
+      verified: true, // demo clinician, pre-verified
+      verifiedAt: new Date(),
     },
   });
 
@@ -150,6 +152,8 @@ async function main() {
       agencyId: 'EMS-METRO-404',
       organizationType: 'GOVERNMENT',
       qualification: 'EMT-Paramedic Certified',
+      verified: true,
+      verifiedAt: new Date(),
     },
   });
 

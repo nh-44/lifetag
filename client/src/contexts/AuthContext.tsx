@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { toast } from 'sonner';
 import { authenticateUser, registerUser, checkUserIdAvailability } from '@/services/userService';
 import { tokenStorage } from '@/utils/tokenStorage';
+import { API_URL, refreshAccessToken } from '@/services/api';
 
 export type UserRole = 'USER' | 'DOCTOR' | 'FIRST_RESPONDER';
 
@@ -10,8 +11,16 @@ export interface User {
   accountId?: string;
   name: string;
   role: UserRole;
-  token: string;
+  /** Clinicians only: verified by the Healthcare Authority (required for clinical actions). */
+  verified?: boolean;
 }
+
+// Only the non-secret profile is persisted. Tokens never touch Web Storage:
+// the access token is in memory and the refresh token is an HttpOnly cookie.
+const persistUser = (user: User) => {
+  const { userId, accountId, name, role, verified } = user;
+  localStorage.setItem('aegistagUser', JSON.stringify({ userId, accountId, name, role, verified }));
+};
 
 interface AuthContextProps {
   currentUser: User | null;
@@ -40,18 +49,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load user from localStorage on initial render
+  // Restore the session on reload: profile from localStorage, access token from the
+  // refresh cookie. If the refresh fails (offline, or cookie expired) the profile is
+  // kept so offline tag scanning still works; the next authenticated request retries
+  // the refresh and redirects to /login if the session is really gone.
   useEffect(() => {
-    const storedUser = localStorage.getItem('lifetagUser');
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse stored user:', e);
-        localStorage.removeItem('lifetagUser');
-      }
+    const storedUser = localStorage.getItem('aegistagUser');
+    if (!storedUser) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    try {
+      const { token: _legacyToken, ...user } = JSON.parse(storedUser);
+      setCurrentUser(user);
+      persistUser(user); // rewrites entries saved by older versions without their token
+    } catch (e) {
+      console.error('Failed to parse stored user:', e);
+      localStorage.removeItem('aegistagUser');
+      setLoading(false);
+      return;
+    }
+    refreshAccessToken().finally(() => setLoading(false));
   }, []);
 
   const login = async (userId: string, password: string, redirectAccountId?: string) => {
@@ -66,13 +84,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await authenticateUser(userId, password);
       
       if (response && response.user && response.token) {
-        const userWithToken = { ...response.user, token: response.token };
-        setCurrentUser(userWithToken);
-        localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
+        setCurrentUser(response.user);
+        persistUser(response.user);
         tokenStorage.setToken(response.token);
-        if (response.refreshToken) {
-          tokenStorage.setRefreshToken(response.refreshToken);
-        }
         toast.success('Logged in successfully');
         return true;
       }
@@ -103,13 +117,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await registerUser(userData);
       
       if (response && response.user && response.token) {
-        const userWithToken = { ...response.user, token: response.token };
-        setCurrentUser(userWithToken);
-        localStorage.setItem('lifetagUser', JSON.stringify(userWithToken));
+        setCurrentUser(response.user);
+        persistUser(response.user);
         tokenStorage.setToken(response.token);
-        if (response.refreshToken) {
-          tokenStorage.setRefreshToken(response.refreshToken);
-        }
         toast.success('Account created successfully');
         return true;
       }
@@ -126,21 +136,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    const refreshToken = tokenStorage.getRefreshToken();
-    if (refreshToken) {
-      try {
-        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:9000/api/v1'}/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken })
-        });
-      } catch (e) {
-        console.error('Failed to invalidate refresh token on backend', e);
-      }
+    try {
+      // The server revokes the refresh token named by the cookie and clears the cookie
+      await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    } catch (e) {
+      console.error('Failed to invalidate refresh token on backend', e);
     }
     
     setCurrentUser(null);
-    localStorage.removeItem('lifetagUser');
+    localStorage.removeItem('aegistagUser');
     tokenStorage.clearTokens();
     toast.success('Logged out successfully');
   };

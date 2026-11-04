@@ -1,7 +1,7 @@
 import { userRepository } from '../repositories/userRepository';
+import { doctorRepository } from '../repositories/doctorRepository';
 import { EmergencyInfoDTO, FullUserProfileDTO } from '../types/patient.types';
 import { User, TriageProfile, MedicalHistory } from '@prisma/client';
-import { CryptoUtils } from '../utils/crypto.utils';
 
 type UserWithRelations = User & {
   triageProfile: TriageProfile | null;
@@ -28,6 +28,9 @@ const mapToEmergencyInfo = (user: UserWithRelations): EmergencyInfoDTO => {
     primaryPhysician: user.triageProfile?.primaryPhysician ? { userId: user.triageProfile.primaryPhysician, name: 'Dr.' } : { userId: '', name: '' },
     insuranceId: user.triageProfile?.insuranceId || '',
     authoritySignature: user.triageProfile?.authoritySignature || undefined,
+    tagIssuedAt: user.triageProfile?.tagIssuedAt?.toISOString(),
+    tagIssuedBy: user.triageProfile?.tagIssuedBy || undefined,
+    tagRevokedAt: user.triageProfile?.tagRevokedAt?.toISOString(),
   };
 };
 
@@ -65,6 +68,16 @@ export const patientService = {
   },
 
   updateProfile: async (userId: string, data: FullUserProfileDTO) => {
+    // Naming a primary physician grants that doctor standing access to the full record,
+    // so it must be a real, verified doctor account, not an arbitrary string.
+    const physicianId = data.primaryPhysician?.userId?.trim();
+    if (physicianId) {
+      const doctor = await doctorRepository.findByUserId(physicianId);
+      if (!doctor || !doctor.verified) {
+        throw { statusCode: 400, message: 'Primary physician must be a verified doctor account (DR followed by 5 digits)' };
+      }
+    }
+
     const triageData = {
       age: data.age,
       bloodGroup: data.bloodGroup,
@@ -73,7 +86,8 @@ export const patientService = {
       dnrStatus: data.dnrStatus,
       insuranceId: data.insuranceId,
       primaryPhysician: data.primaryPhysician?.userId || null,
-      authoritySignature: data.authoritySignature || CryptoUtils.simulateAuthoritySignature(userId),
+      // authoritySignature is deliberately not writable here: only the issuance
+      // service may set it, after a DOCTOR certifies a specific key (see issuance.service.ts).
     };
 
     const medicalData = {

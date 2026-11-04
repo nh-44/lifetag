@@ -9,14 +9,14 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-full lifetag-gradient flex items-center justify-center text-white font-bold">
+              <div className="w-8 h-8 rounded-full aegistag-gradient flex items-center justify-center text-white font-bold">
                 LT
               </div>
-              <span className="text-2xl font-bold text-lifetag-primary">LifeTag</span>
+              <span className="text-2xl font-bold text-aegistag-primary">AegisTag</span>
             </Link>
             <p className="mt-4 text-gray-600">
               Access critical medical information instantly with NFC technology.
-              LifeTag keeps your medical data secure and accessible when needed most.
+              AegisTag keeps your medical data secure and accessible when needed most.
             </p>
           </div>
           
@@ -24,29 +24,29 @@ const Footer = () => {
             <h3 className="text-lg font-semibold mb-4 text-gray-800">Quick Links</h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/" className="text-gray-600 hover:text-lifetag-primary">Home</Link>
+                <Link to="/" className="text-gray-600 hover:text-aegistag-primary">Home</Link>
               </li>
               <li>
-                <Link to="/login" className="text-gray-600 hover:text-lifetag-primary">Login</Link>
+                <Link to="/login" className="text-gray-600 hover:text-aegistag-primary">Login</Link>
               </li>
               <li>
-                <Link to="/signup" className="text-gray-600 hover:text-lifetag-primary">Sign Up</Link>
+                <Link to="/signup" className="text-gray-600 hover:text-aegistag-primary">Sign Up</Link>
               </li>
             </ul>
           </div>
           
           <div>
             <h3 className="text-lg font-semibold mb-4 text-gray-800">Contact</h3>
-            <p className="text-gray-600">Have questions about LifeTag?</p>
-            <a href="mailto:contact@lifetag.com" className="text-lifetag-primary hover:underline">
-              contact@lifetag.com
+            <p className="text-gray-600">Have questions about AegisTag?</p>
+            <a href="mailto:contact@aegistag.com" className="text-aegistag-primary hover:underline">
+              contact@aegistag.com
             </a>
           </div>
         </div>
         
         <div className="border-t border-gray-200 mt-8 pt-6 flex flex-col md:flex-row justify-between items-center">
           <p className="text-gray-600 text-sm">
-            &copy; {new Date().getFullYear()} LifeTag. All rights reserved.
+            &copy; {new Date().getFullYear()} AegisTag. All rights reserved.
           </p>
           
           <div className="mt-4 md:mt-0">
@@ -55,10 +55,10 @@ const Footer = () => {
             </p>
             <div className="flex items-center mt-2">
               <a 
-                href="https://github.com/your-repo/lifetag" 
+                href="https://github.com/your-repo/aegistag" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="flex items-center text-gray-600 hover:text-lifetag-primary"
+                className="flex items-center text-gray-600 hover:text-aegistag-primary"
               >
                 <Github size={16} className="mr-1" />
                 <span className="text-sm">GitHub Repository</span>

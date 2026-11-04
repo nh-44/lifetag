@@ -29,3 +29,6 @@ client/coverage/
 .env
 .env.*
 !.env.example
+
+# LaTeX build scratch (final PDF is copied to docs/aegistag_paper_draft.pdf)
+docs/build/

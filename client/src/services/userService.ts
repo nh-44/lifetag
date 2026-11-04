@@ -1,3 +1,4 @@
+import { NfcTagPayload } from '@/types';
 import { fetchWithAuth, fetchWithoutAuth } from './api';
 
 export interface EmergencyInfo {
@@ -12,6 +13,9 @@ export interface EmergencyInfo {
   primaryPhysician: { userId: string; name: string };
   insuranceId: string;
   authoritySignature?: string;
+  tagIssuedAt?: string;
+  tagIssuedBy?: string;
+  tagRevokedAt?: string;
 }
 
 export interface DoctorOnlyInfo {
@@ -151,13 +155,57 @@ export const saveFirstResponderProfile = async (profile: FirstResponderProfile):
   throw new Error(response.error?.message || 'Failed to update profile');
 };
 
-export const logScan = async (patientAccount: string, deviceMeta?: string): Promise<any> => {
+/**
+ * Logs a tag scan to the server's audit trail. The server re-verifies the raw
+ * tag payload and only marks the scan "certified" (the condition the doctor
+ * consent gate checks) when the tag is authority-certified, belongs to
+ * patientAccount, and is the patient's current, unrevoked tag.
+ */
+export const logScan = async (patientAccount: string, tagPayload: NfcTagPayload, deviceMeta?: string): Promise<any> => {
   const response = await fetchWithAuth(`/scans`, {
     method: 'POST',
-    body: JSON.stringify({ patientAccount, deviceMeta }),
+    body: JSON.stringify({ patientAccount, tagPayload, deviceMeta }),
   });
   if (response.success) return response.data;
   throw new Error(response.error?.message || 'Failed to log scan');
+};
+
+/** DOCTOR only: asks the Healthcare Authority to certify a freshly generated tag key. */
+export const certifyTagKey = async (
+  accountId: string,
+  publicKey: { x: string; y: string },
+  issuedAt: number
+): Promise<string> => {
+  const response = await fetchWithAuth(`/issuance/certify`, {
+    method: 'POST',
+    body: JSON.stringify({ accountId, publicKey, issuedAt }),
+  });
+  if (response.success) return response.data.authoritySignature;
+  throw new Error(response.error?.message || 'Tag certification failed');
+};
+
+export interface AccessLogEntry {
+  timestamp: string;
+  scannedBy: string;
+  scannerName: string;
+  organization: string;
+  accessType: 'tag-scan' | 'online-lookup';
+  certified: boolean;
+  tagFreshness: string | null;
+}
+
+/** USER only: every tag scan and online lookup of my record, newest first. */
+export const getMyAccessLog = async (): Promise<AccessLogEntry[]> => {
+  const response = await fetchWithAuth(`/patients/me/access-log`);
+  if (response.success) return response.data;
+  throw new Error(response.error?.message || 'Failed to load access log');
+};
+
+/** USER only: revokes every tag issued so far (lost or stolen tag). */
+export const revokeMyTag = async (): Promise<{ revokedAt: string }> => {
+  const response = await fetchWithAuth(`/issuance/revoke`, { method: 'POST' });
+  if (response.success) return response.data;
+  throw new Error(response.error?.message || 'Failed to revoke tag');
 };
 
 export const getScanHistory = async (): Promise<any[]> => {

@@ -10,6 +10,9 @@ export interface EmergencyInfoDTO {
   primaryPhysician: { userId: string; name: string };
   insuranceId: string;
   authoritySignature?: string;
+  tagIssuedAt?: string;  // issuedAt of the only currently valid tag
+  tagIssuedBy?: string;  // Doctor who certified it
+  tagRevokedAt?: string; // Set if the patient reported the tag lost
 }
 
 export interface DoctorOnlyInfoDTO {
@@ -78,6 +81,7 @@ export interface DoctorProfileDTO {
   qualifications: string[];
   hospitalClinic: string;
   specialty: string;
+  verified?: boolean;
 }
 
 export interface FirstResponderProfileDTO {
@@ -89,4 +93,26 @@ export interface FirstResponderProfileDTO {
   agencyId: string;
   organizationType: 'Government' | 'Private' | 'Government Funded';
   qualification: string;
+  verified?: boolean;
 }
+
+// Explicit whitelists for clinician self-service updates. validate() strips every other
+// key (password, userId, verified, ...) before the body reaches Prisma.
+export const DoctorProfileUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  contactInfo: z.string().max(100),
+  medicalLicenseNumber: z.string().trim().min(1).max(50),
+  qualifications: z.array(z.string().max(200)).max(20),
+  hospitalClinic: z.string().max(200),
+  specialty: z.string().max(100),
+});
+
+export const FirstResponderProfileUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  occupation: z.string().max(100),
+  contactInfo: z.string().max(100),
+  agency: z.string().max(200),
+  agencyId: z.string().max(100),
+  organizationType: z.enum(['Government', 'Private', 'Government Funded']),
+  qualification: z.string().max(200),
+});

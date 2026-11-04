@@ -81,6 +81,21 @@ export const userRepository = {
       update: data,
     });
   },
+  recordTagIssuance: async (
+    userId: string,
+    data: { authoritySignature: string; tagIssuedAt: Date; tagIssuedBy: string }
+  ) => {
+    return await prisma.triageProfile.update({
+      where: { userId },
+      data: { ...data, tagRevokedAt: null },
+    });
+  },
+  revokeTag: async (userId: string, revokedAt: Date) => {
+    return await prisma.triageProfile.update({
+      where: { userId },
+      data: { tagRevokedAt: revokedAt },
+    });
+  },
   updateMedicalHistory: async (userId: string, data: Prisma.MedicalHistoryUpdateInput) => {
     return await prisma.medicalHistory.upsert({
       where: { userId },

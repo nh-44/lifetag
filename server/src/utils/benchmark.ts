@@ -54,7 +54,7 @@ function toShortFormat(payload: TriagePayload): Record<string, unknown> {
 }
 
 /**
- * Upgraded LifeTag Cryptographic, Key Generation, & Compression Latency Benchmark
+ * Upgraded AegisTag Cryptographic, Key Generation, & Compression Latency Benchmark
  * Conducts exact performance profiling across 100 runs.
  */
 
@@ -89,7 +89,7 @@ function getPercentile(times: number[], percentile: number): number {
 
 export function runBenchmark(iterations: number = 100) {
   console.log(`\n======================================================================`);
-  console.log(`Executing LifeTag Empirical Security & Performance Benchmarks (${iterations} runs)`);
+  console.log(`Executing AegisTag Empirical Security & Performance Benchmarks (${iterations} runs)`);
   console.log(`======================================================================\n`);
 
   // Size Comparison Metrics

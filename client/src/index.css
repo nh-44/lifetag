@@ -95,11 +95,11 @@
 }
 
 @layer components {
-  .lifetag-gradient {
-    @apply bg-gradient-to-r from-lifetag-primary to-lifetag-secondary;
+  .aegistag-gradient {
+    @apply bg-gradient-to-r from-aegistag-primary to-aegistag-secondary;
   }
   
-  .lifetag-card {
+  .aegistag-card {
     @apply bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-shadow duration-300;
   }
 }
